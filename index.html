@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Index</title>
+    <style>
+        /* Reset */
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1b2735);
+            background-size: 400% 400%;
+            animation: gradientBG 12s ease infinite;
+            overflow: hidden;
+            color: white;
+        }
+        
+        @keyframes gradientBG {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+        /* Admin Icon */
+        
+        .admin-icon {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            /* ✅ moved to right side */
+            font-size: 32px;
+            cursor: pointer;
+            color: #00e6ff;
+            animation: pulse 2s infinite;
+            transition: 0.3s;
+            text-shadow: 0 0 8px #00e6ff, 0 0 20px #00e6ff;
+        }
+        
+        .admin-icon:hover {
+            color: #ff00ff;
+            text-shadow: 0 0 12px #ff00ff, 0 0 30px #ff00ff;
+            transform: scale(1.2);
+        }
+        
+        @keyframes pulse {
+            0% {
+                text-shadow: 0 0 5px #00e6ff, 0 0 15px #00e6ff;
+            }
+            50% {
+                text-shadow: 0 0 20px #00e6ff, 0 0 40px #00e6ff;
+            }
+            100% {
+                text-shadow: 0 0 5px #00e6ff, 0 0 15px #00e6ff;
+            }
+        }
+        /* Button Container */
+        
+        .container {
+            text-align: center;
+            animation: fadeInUp 1.5s ease;
+        }
+        
+        @keyframes fadeInUp {
+            0% {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        /* Glowing Button */
+        
+        .glow-button {
+            padding: 16px 50px;
+            font-size: 22px;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            border-radius: 12px;
+            background: #00e6ff;
+            color: #121212;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: all 0.4s ease;
+            box-shadow: 0 0 12px #00e6ff, 0 0 30px #00e6ff;
+        }
+        
+        .glow-button:hover {
+            background: #ff00ff;
+            color: #fff;
+            box-shadow: 0 0 20px #ff00ff, 0 0 50px #ff00ff;
+            transform: scale(1.08);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Admin Icon (now top-right) -->
+    <div class="admin-icon" onclick="adminLogin()">🔑</div>
+
+    <!-- Main Content -->
+    <div class="container">
+        <button class="glow-button" onclick="location.href='team.html'">Select Team</button>
+    </div>
+
+    <script>
+        function adminLogin() {
+            let pwd = prompt("🔐 Enter Admin Password:");
+            if (pwd === "@Upbeat1819") {
+                window.location.href = "admin.html";
+            } else if (pwd !== null) {
+                alert("❌ Incorrect password!");
+            }
+        }
+    </script>
+</body>
+
+</html>

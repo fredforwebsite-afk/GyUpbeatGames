@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Team Buzzer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Select Team -->
+    <div class="container" id="teamSelect">
+        <h1>Select Your Team</h1>
+        <button class="team-choice" onclick="selectTeam('Zack')">Team Zack</button>
+        <button class="team-choice" onclick="selectTeam('Ryan')">Team Ryan</button>
+        <button class="team-choice" onclick="selectTeam('Kyle')">Team Kyle</button>
+    </div>
+
+    <!-- Buzzer Area -->
+    <div class="container" id="buzzerArea" style="display:none;">
+        <h2 id="teamName"></h2>
+        <button id="buzzerBtn" class="buzzer" disabled>Press Buzzer!</button>
+    </div>
+
+    <!-- Answer Box -->
+    <div class="container" id="answerArea" style="display:none;">
+        <h2>Type your answer:</h2>
+        <input type="text" id="teamAnswer" placeholder="Your final answer...">
+        <button onclick="submitAnswer()">Submit</button>
+        <div id="answerTimer" style="font-size:22px;margin-top:10px;color:lightgreen;">Answer Time: 0</div>
+    </div>
+
+    <!-- Sounds -->
+    <audio id="buzzSound" src="sound/buzzSound.mp3"></audio>
+    <audio id="correctSound" src="sound/correctSound.wav"></audio>
+    <audio id="wrongSound" src="sound/wrongSound.wav"></audio>
+
+    <script>
+        let teamName = null;
+        let answerInterval;
+        let answerTimer = 20;
+
+        function selectTeam(name) {
+            teamName = name;
+            sessionStorage.setItem("team", teamName);
+
+            document.getElementById("teamSelect").style.display = "none";
+            document.getElementById("buzzerArea").style.display = "block";
+            document.getElementById("teamName").innerText = "You are Team " + teamName;
+        }
+
+        // Buzzer logic
+        setInterval(() => {
+            let enable = localStorage.getItem("enableBuzzer") === "true";
+            let steal = localStorage.getItem("stealMode");
+            let alreadyBuzzed = localStorage.getItem("buzzed");
+
+            if (teamName) {
+                if ((enable && !alreadyBuzzed) || (steal && steal !== teamName && !alreadyBuzzed)) {
+                    document.getElementById("buzzerBtn").disabled = false;
+                } else {
+                    document.getElementById("buzzerBtn").disabled = true;
+                }
+            }
+        }, 300);
+
+        document.getElementById("buzzerBtn").onclick = () => {
+            if (!teamName) return;
+
+            localStorage.setItem("buzzed", teamName);
+            document.getElementById("buzzerBtn").disabled = true;
+            document.getElementById("answerArea").style.display = "block";
+
+            // start 20s answer countdown
+            startAnswerTimer();
+            document.getElementById("buzzSound").play();
+        };
+
+        function startAnswerTimer() {
+            clearInterval(answerInterval);
+            answerTimer = 20;
+            document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+
+            answerInterval = setInterval(() => {
+                answerTimer--;
+                document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+                if (answerTimer <= 0) {
+                    clearInterval(answerInterval);
+                    document.getElementById("answerTimer").innerText = "⏳ Time's up!";
+                    document.getElementById("answerArea").style.display = "none";
+                }
+            }, 1000);
+        }
+
+        function submitAnswer() {
+            let ans = document.getElementById("teamAnswer").value;
+            if (ans.trim() === "") return;
+
+            localStorage.setItem("teamAnswer_" + teamName, ans);
+            localStorage.setItem("submittedAnswer", teamName + ": " + ans);
+
+            document.getElementById("answerArea").style.display = "none";
+            clearInterval(answerInterval);
+        }
+    </script>
+</body>
+
+</html>
