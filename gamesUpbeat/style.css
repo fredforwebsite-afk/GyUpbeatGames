@@ -1,0 +1,359 @@
+/* ================== GLOBAL ================== */
+
+body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background: #111;
+    color: white;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    padding: 20px;
+}
+
+h1,
+h2 {
+    margin: 10px 0;
+}
+
+.glow {
+    color: #0ff;
+    text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+}
+
+.glow-red {
+    color: red;
+    text-shadow: 0 0 10px red, 0 0 20px darkred;
+}
+
+
+/* ================== BUTTONS ================== */
+
+button {
+    padding: 15px 30px;
+    font-size: 18px;
+    margin: 8px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+button:disabled {
+    background: gray;
+    cursor: not-allowed;
+}
+
+.start-btn {
+    background: green;
+    color: white;
+    font-size: 20px;
+}
+
+.team-choice {
+    background: #007bff;
+    color: white;
+    padding: 12px 20px;
+    margin: 10px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.3s;
+    font-size: 18px;
+}
+
+.team-choice:hover {
+    background: #0078a0;
+}
+
+
+/* ================== BUZZER ================== */
+
+.buzzer {
+    width: 160px;
+    height: 160px;
+    background: radial-gradient(circle at 30% 30%, red, darkred);
+    color: white;
+    font-size: 28px;
+    font-weight: bold;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 30px rgba(255, 0, 0, 0.8);
+    transition: transform 0.15s, box-shadow 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 20px auto;
+    animation: pulse 1.5s infinite;
+}
+
+.buzzer:hover:enabled {
+    transform: scale(1.1);
+    box-shadow: 0 0 50px rgba(255, 50, 50, 1);
+}
+
+.buzzer:active:enabled {
+    transform: scale(0.95);
+    box-shadow: 0 0 15px rgba(200, 0, 0, 0.9);
+}
+
+.buzzer:disabled {
+    background: gray;
+    box-shadow: none;
+    cursor: not-allowed;
+    animation: none;
+}
+
+
+/* Pulse animation (enabled only) */
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 15px rgba(255, 0, 0, 0.6);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(255, 0, 0, 1);
+    }
+    100% {
+        box-shadow: 0 0 15px rgba(255, 0, 0, 0.6);
+    }
+}
+
+
+/* ================== TIMER ================== */
+
+.timer {
+    font-size: 28px;
+    margin: 15px;
+    color: yellow;
+}
+
+
+/* ================== INPUT ================== */
+
+input[type="text"] {
+    padding: 10px;
+    font-size: 18px;
+    border-radius: 5px;
+    width: 60%;
+    margin-top: 10px;
+}
+
+
+/* ================== SCOREBOARD ================== */
+
+table {
+    border-collapse: collapse;
+    width: 60%;
+    margin: auto;
+    margin-top: 20px;
+    background: #333;
+}
+
+th,
+td {
+    padding: 12px;
+    border: 1px solid white;
+    font-size: 20px;
+}
+
+
+/* Highlight score when updated */
+
+.highlight {
+    background: yellow;
+    color: black;
+    animation: flash 1s;
+}
+
+@keyframes flash {
+    0% {
+        background: yellow;
+        color: black;
+    }
+    100% {
+        background: #333;
+        color: white;
+    }
+}
+
+
+/* ================== QUESTION BOARD ================== */
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.board-item {
+    background: #222;
+    color: yellow;
+    font-size: 22px;
+    font-weight: bold;
+    border: 3px solid #555;
+    border-radius: 10px;
+    padding: 30px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.board-item:hover {
+    background: #444;
+    transform: scale(1.05);
+}
+
+.board-item.revealed {
+    background: #666 !important;
+    color: #ccc !important;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+
+/* ================== LEVEL BUTTONS ================== */
+
+.level-btn {
+    background: #444;
+    color: white;
+    padding: 10px 18px;
+    margin: 5px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+    font-size: 16px;
+}
+
+.level-btn:hover {
+    background: #666;
+    transform: scale(1.05);
+}
+
+.level-btn.selected {
+    background: green;
+    color: #fff;
+    font-weight: bold;
+}
+
+.circle-timer {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 15px auto;
+}
+
+.circle-timer svg {
+    transform: rotate(-90deg);
+    width: 120px;
+    height: 120px;
+}
+
+circle {
+    fill: none;
+    stroke-width: 12;
+    stroke-linecap: round;
+}
+
+circle.bg {
+    stroke: #333;
+    opacity: 0.3;
+}
+
+circle.progress {
+    stroke: lime;
+    stroke-dasharray: 339.292;
+    /* 2 * π * r (2π * 54) */
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1s linear;
+}
+
+.time-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 28px;
+    font-weight: bold;
+    color: yellow;
+}
+
+
+/* Settings Icon */
+
+#settingsIcon {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 28px;
+    cursor: pointer;
+    color: white;
+    transition: transform 0.2s;
+}
+
+#settingsIcon:hover {
+    transform: rotate(90deg);
+    color: #00ffcc;
+}
+
+
+/* Modal */
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+.modal-content {
+    background: #222;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 12px;
+    width: 320px;
+    color: white;
+    text-align: center;
+    box-shadow: 0 0 20px #00ffcc;
+}
+
+.modal-content input {
+    width: 80%;
+    padding: 6px;
+    margin-top: 6px;
+    border-radius: 6px;
+    border: none;
+    outline: none;
+    text-align: center;
+}
+
+.modal-content button {
+    margin-top: 15px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: #00ffcc;
+    color: black;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.modal-content button:hover {
+    background: #00ffaa;
+}
+
+.close {
+    position: absolute;
+    right: 20px;
+    font-size: 26px;
+    cursor: pointer;
+}

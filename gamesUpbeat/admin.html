@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Settings icon */
+        
+        #settingsIcon {
+            position: fixed;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        /* Modal styles */
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background: #222;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+            color: white;
+            text-align: center;
+        }
+        
+        .modal-content h2 {
+            margin-bottom: 15px;
+        }
+        
+        .modal-content input {
+            width: 80%;
+            padding: 8px;
+            margin: 8px 0;
+            border-radius: 5px;
+            border: none;
+            text-align: center;
+        }
+        
+        .modal-content button {
+            padding: 8px 14px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        
+        .btn-save {
+            background: green;
+            color: white;
+        }
+        
+        .btn-close {
+            background: red;
+            color: white;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Settings Icon -->
+    <div id="settingsIcon" onclick="openSettingsModal()">⚙️</div>
+
+    <div class="container">
+        <h1>Admin Panel</h1>
+
+        <!-- Round Controls -->
+        <div>
+            <button class="start-btn" onclick="startRound()">Start Buzzer</button>
+        </div>
+
+        <h2>First to Buzz:</h2>
+        <h1 id="firstBuzz">None yet</h1>
+        <div class="circle-timer">
+            <svg>
+        <circle class="bg" cx="60" cy="60" r="54"></circle>
+        <circle class="progress" id="circleProgress" cx="60" cy="60" r="54"></circle>
+      </svg>
+            <div class="time-text" id="circleTime">10</div>
+        </div>
+
+        <h2>Submitted Answer:</h2>
+        <div id="submittedAnswer" style="font-size:22px;color:yellow;">⏳</div>
+
+        <!-- Reveal Area -->
+        <div id="revealAnswer" style="margin-top:15px;font-size:20px;color:cyan;"></div>
+
+        <!-- Steal Notice -->
+        <div id="stealNotice" style="color:orange;font-weight:bold;margin-top:10px;"></div>
+
+        <h2>Choose Level:</h2>
+        <button class="level-btn" onclick="showBoard('easy', this)">Easy (100 pts)</button>
+        <button class="level-btn" onclick="showBoard('medium', this)">Medium (300 pts)</button>
+        <button class="level-btn" onclick="showBoard('hard', this)">Hard (500 pts)</button>
+
+        <!-- Question Grid -->
+        <div id="questionBox" class="board"></div>
+
+        <h2>Scoreboard</h2>
+        <table>
+            <tr>
+                <th>Team</th>
+                <th>Score</th>
+            </tr>
+            <tr>
+                <td>Zack</td>
+                <td id="scoreZack">0</td>
+            </tr>
+            <tr>
+                <td>Ryan</td>
+                <td id="scoreRyan">0</td>
+            </tr>
+            <tr>
+                <td>Kyle</td>
+                <td id="scoreKyle">0</td>
+            </tr>
+        </table>
+
+        <button style="margin-top:20px;background:orange;" onclick="resetGame()">🔄 Reset Game</button>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <h2>Game Settings</h2>
+            <label>Buzz Time (seconds):</label><br>
+            <input type="number" id="buzzTimeInput" min="3" value="10"><br>
+
+            <label>Answer Time (seconds):</label><br>
+            <input type="number" id="answerTimeInput" min="3" value="15"><br>
+
+            <button class="btn-save" onclick="saveSettings()">Save</button>
+            <button class="btn-close" onclick="closeSettingsModal()">Close</button>
+        </div>
+    </div>
+
+    <!-- Sounds -->
+    <audio id="buzzSound" src="sound/buzzSound.mp3"></audio>
+    <audio id="correctSound" src="sound/correctSound.wav"></audio>
+    <audio id="wrongSound" src="sound/wrongSound.wav"></audio>
+    <audio id="beepSound" src="sound/countdown.wav" preload="auto"></audio>
+
+    <!-- High pitch beep (5s–1s) -->
+    <audio id="beepHighSound" src="sound/countdown2.wav" preload="auto"></audio>
+
+    <!-- Time's up buzzer -->
+    <audio id="timesUpSound" src="sound/timesup.wav" preload="auto"></audio>
+
+
+    <script src="script.js"></script>
+</body>
+
+</html>
