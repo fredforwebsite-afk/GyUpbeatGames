@@ -218,15 +218,6 @@ td {
 
 /* ================== LEVEL BUTTONS ================== */
 
-.level-btn {
-    position: relative;
-    z-index: 10;
-}
-.board {
-    position: relative;
-    z-index: 1;
-}
-
 
 .level-btn {
     background: #444;
@@ -367,3 +358,4 @@ circle.progress {
     font-size: 26px;
     cursor: pointer;
 }
+
