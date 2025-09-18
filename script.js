@@ -807,10 +807,17 @@ resetTurnState = function() {
     originalResetTurnState();
 };
 
+
+function closeSettingsModal() {
+  document.getElementById("settingsModal").style.display = "none";
+}
+
+
 window.startRound = startRound;
 window.showBoard = showBoard;
 window.resetGame = resetGame;
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
+
 
