@@ -38,6 +38,33 @@
    <script type="module" src="script.js"></script>
 
   <script>
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import {
+  getDatabase,
+  ref,
+  set,
+  update,
+  onValue,
+  push,
+  remove,
+  get,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
+    authDomain: "gygames-fafcb.firebaseapp.com",
+    databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
+    projectId: "gygames-fafcb",
+    storageBucket: "gygames-fafcb.firebasestorage.app",
+    messagingSenderId: "603231637988",
+    appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+    measurementId: "G-058J8NLC43"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
       let teamName = null;
     let answerInterval;
     let answerTimer = 20;
@@ -104,6 +131,7 @@
 </body>
 
 </html>
+
 
 
 
