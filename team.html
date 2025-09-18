@@ -2,36 +2,121 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <title>Team Buzzer</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>Team Buzzer</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <div class="container" id="teamSelect">
-        <h1>Select Your Team</h1>
-        <button class="team-choice" onclick="selectTeam('Zack')">Team Zack</button>
-        <button class="team-choice" onclick="selectTeam('Ryan')">Team Ryan</button>
-        <button class="team-choice" onclick="selectTeam('Kyle')">Team Kyle</button>
-    </div>
+  <!-- Select Team -->
+  <div class="container" id="teamSelect">
+    <h1>Select Your Team</h1>
+    <button class="team-choice" onclick="selectTeam('Zack')">Team Zack</button>
+    <button class="team-choice" onclick="selectTeam('Ryan')">Team Ryan</button>
+    <button class="team-choice" onclick="selectTeam('Kyle')">Team Kyle</button>
+  </div>
 
-    <div class="container" id="buzzerArea" style="display:none;">
-        <h2 id="teamName"></h2>
-        <button id="buzzerBtn" class="buzzer" disabled>Press Buzzer!</button>
-    </div>
+  <!-- Buzzer Area -->
+  <div class="container" id="buzzerArea" style="display:none;">
+    <h2 id="teamName"></h2>
+    <button id="buzzerBtn" class="buzzer" disabled>Press Buzzer!</button>
+  </div>
 
-    <div class="container" id="answerArea" style="display:none;">
-        <h2>Type your answer:</h2>
-        <input type="text" id="teamAnswer" placeholder="Your final answer...">
-        <button onclick="submitAnswer()">Submit</button>
-    </div>
+  <!-- Answer Box -->
+  <div class="container" id="answerArea" style="display:none;">
+    <h2>Type your answer:</h2>
+    <input type="text" id="teamAnswer" placeholder="Your final answer...">
+    <button onclick="submitAnswer()">Submit</button>
+    <div id="answerTimer" style="font-size:22px;margin-top:10px;color:lightgreen;">Answer Time: 0</div>
+  </div>
 
-    <audio id="buzzSound" src="sound/buzzSound.mp3"></audio>
-    <audio id="correctSound" src="sound/correctSound.wav"></audio>
-    <audio id="wrongSound" src="sound/wrongSound.wav"></audio>
+  <!-- Sounds -->
+  <audio id="buzzSound" src="sound/buzzSound.mp3"></audio>
+  <audio id="correctSound" src="sound/correctSound.wav"></audio>
+  <audio id="wrongSound" src="sound/wrongSound.wav"></audio>
 
-    <script type="module" src="script.js"></script>
+  <!-- Firebase + Script -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+    import { getDatabase, ref, update, onValue } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
 
+    const firebaseConfig = {
+      apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
+      authDomain: "gygames-fafcb.firebaseapp.com",
+      databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
+      projectId: "gygames-fafcb",
+      storageBucket: "gygames-fafcb.firebasestorage.app",
+      messagingSenderId: "603231637988",
+      appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+      measurementId: "G-058J8NLC43"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let teamName = null;
+    let answerInterval;
+    let answerTimer = 20;
+
+    function selectTeam(name) {
+      teamName = name;
+      document.getElementById("teamSelect").style.display = "none";
+      document.getElementById("buzzerArea").style.display = "block";
+      document.getElementById("teamName").innerText = "You are Team " + teamName;
+    }
+    window.selectTeam = selectTeam;
+
+    // Listen for game state
+    onValue(ref(db, "game/state"), snap => {
+      let state = snap.val();
+      if (!state || !teamName) return;
+
+      let canBuzz = state.enableBuzzer && !state.buzzed;
+      document.getElementById("buzzerBtn").disabled = !canBuzz;
+
+      if (state.buzzed === teamName && state.mode === "answer") {
+        document.getElementById("answerArea").style.display = "block";
+        startAnswerTimer(state.timeLeft || 20);
+      }
+    });
+
+    // Buzz button
+    document.getElementById("buzzerBtn").onclick = () => {
+      if (!teamName) return;
+      update(ref(db, "game/state"), {
+        buzzed: teamName,
+        answeringTeam: teamName,
+        mode: "answer"
+      });
+      document.getElementById("buzzSound").play();
+    };
+
+    function startAnswerTimer(startTime) {
+      clearInterval(answerInterval);
+      answerTimer = startTime;
+      document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+      answerInterval = setInterval(() => {
+        answerTimer--;
+        document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+        if (answerTimer <= 0) {
+          clearInterval(answerInterval);
+          document.getElementById("answerTimer").innerText = "⏳ Time's up!";
+          document.getElementById("answerArea").style.display = "none";
+        }
+      }, 1000);
+    }
+
+    function submitAnswer() {
+      let ans = document.getElementById("teamAnswer").value;
+      if (ans.trim() === "") return;
+      update(ref(db, "game/state"), {
+        submittedAnswer: teamName + ": " + ans
+      });
+      document.getElementById("answerArea").style.display = "none";
+      clearInterval(answerInterval);
+    }
+    window.submitAnswer = submitAnswer;
+  </script>
 </body>
 
 </html>
