@@ -35,11 +35,102 @@
   <audio id="correctSound" src="sound/correctSound.wav"></audio>
   <audio id="wrongSound" src="sound/wrongSound.wav"></audio>
 
-  <!-- Load Team Script -->
-<script type="module" src="script.js"></script>
+  <!-- Firebase + Game Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getDatabase, ref, set, get, child, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
+    // ✅ Replace with your Firebase config
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+      projectId: "YOUR_PROJECT",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "YOUR_APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let teamName = null;
+    let answerInterval;
+    let answerTimer = 20;
+
+    // ---- Team Select ----
+    function selectTeam(name) {
+      teamName = name;
+
+      document.getElementById("teamSelect").style.display = "none";
+      document.getElementById("buzzerArea").style.display = "block";
+      document.getElementById("teamName").innerText = "You are Team " + teamName;
+    }
+    window.selectTeam = selectTeam;
+
+    // ---- Buzzer Availability ----
+    onValue(ref(db, "enableBuzzer"), (snap) => {
+      const enable = snap.exists() ? snap.val() === true : false;
+
+      onValue(ref(db, "stealMode"), (stealSnap) => {
+        const steal = stealSnap.exists() ? stealSnap.val() : null;
+
+        onValue(ref(db, "buzzed"), (buzzSnap) => {
+          const alreadyBuzzed = buzzSnap.exists() ? buzzSnap.val() : null;
+
+          if (teamName) {
+            if ((enable && !alreadyBuzzed) || (steal && steal !== teamName && !alreadyBuzzed)) {
+              document.getElementById("buzzerBtn").disabled = false;
+            } else {
+              document.getElementById("buzzerBtn").disabled = true;
+            }
+          }
+        });
+      });
+    });
+
+    // ---- Buzz Button ----
+    document.getElementById("buzzerBtn").onclick = async () => {
+      if (!teamName) return;
+
+      await set(ref(db, "buzzed"), teamName);
+      document.getElementById("buzzerBtn").disabled = true;
+      document.getElementById("answerArea").style.display = "block";
+
+      startAnswerTimer();
+      document.getElementById("buzzSound").play();
+    };
+
+    // ---- Answer Timer ----
+    function startAnswerTimer() {
+      clearInterval(answerInterval);
+      answerTimer = 20;
+      document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+
+      answerInterval = setInterval(() => {
+        answerTimer--;
+        document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+        if (answerTimer <= 0) {
+          clearInterval(answerInterval);
+          document.getElementById("answerTimer").innerText = "⏳ Time's up!";
+          document.getElementById("answerArea").style.display = "none";
+        }
+      }, 1000);
+    }
+
+    // ---- Submit Answer ----
+    async function submitAnswer() {
+      let ans = document.getElementById("teamAnswer").value;
+      if (ans.trim() === "") return;
+
+      await set(ref(db, "teamAnswers/" + teamName), ans);
+      await set(ref(db, "submittedAnswer"), teamName + ": " + ans);
+
+      document.getElementById("answerArea").style.display = "none";
+      clearInterval(answerInterval);
+    }
+    window.submitAnswer = submitAnswer;
+  </script>
 </body>
 
 </html>
-
-
