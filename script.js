@@ -1,5 +1,42 @@
 // ================= VARIABLES =================
-let scores = JSON.parse(localStorage.getItem("scores")) || { Zack: 0, Ryan: 0, Kyle: 0 };
+
+const firebaseConfig = {
+    apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
+    authDomain: "gygames-fafcb.firebaseapp.com",
+    databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
+    projectId: "gygames-fafcb",
+    storageBucket: "gygames-fafcb.firebasestorage.app",
+    messagingSenderId: "603231637988",
+    appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+    measurementId: "G-058J8NLC43"
+};
+
+/*
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyADxgFTvu0iycYC_ano36TFclPSh4YfqzE",
+    authDomain: "gygames-fafcb.firebaseapp.com",
+    projectId: "gygames-fafcb",
+    storageBucket: "gygames-fafcb.firebasestorage.app",
+    messagingSenderId: "603231637988",
+    appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+    measurementId: "G-058J8NLC43"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+*/
+// Firebase version: removed localStorage || { Zack: 0, Ryan: 0, Kyle: 0 };
 let currentLevel = "easy";
 let currentQIndex = 0;
 let timerInterval;
