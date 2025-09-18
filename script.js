@@ -646,15 +646,15 @@ if (document.getElementById("buzzerBtn")) {
 function showBoard(level, btn) {
     currentLevel = level;
     renderBoard(level);
-    // disable buzzer while browsing board
     dbSet('enableBuzzer', false);
 
-    // button highlight
     document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("selected"));
     if (btn) btn.classList.add("selected");
 
-    resetTurnState();
+    // ❌ remove this line:
+    // resetTurnState();
 }
+
 
 function renderBoard(level) {
     let container = document.getElementById("questionBox");
@@ -684,12 +684,12 @@ function revealQuestion(index, question, element, level) {
     }
 
     element.classList.add("revealed");
-
-    // persist current question to DB
     dbSet('currentQuestion', question.q);
     currentQIndex = index;
-    resetTurnState(); // reset per-question state when opening a fresh tile
+
+    resetTurnState(); // ✅ correct place
 }
+
 
 // Lock box after answered
 function lockQuestion(level, index) {
@@ -798,3 +798,4 @@ function updateCircle(time, color, max) {
   const startBtn = document.getElementById('startRoundBtn');
   if (startBtn) startBtn.onclick = startRound;
 })();
+
