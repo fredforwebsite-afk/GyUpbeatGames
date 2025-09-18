@@ -646,15 +646,15 @@ if (document.getElementById("buzzerBtn")) {
 function showBoard(level, btn) {
     currentLevel = level;
     renderBoard(level);
+    // disable buzzer while browsing board
     dbSet('enableBuzzer', false);
 
+    // button highlight
     document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("selected"));
     if (btn) btn.classList.add("selected");
 
-    // ❌ remove this line:
-    // resetTurnState();
+    resetTurnState();
 }
-
 
 function renderBoard(level) {
     let container = document.getElementById("questionBox");
@@ -684,12 +684,12 @@ function revealQuestion(index, question, element, level) {
     }
 
     element.classList.add("revealed");
+
+    // persist current question to DB
     dbSet('currentQuestion', question.q);
     currentQIndex = index;
-
-    resetTurnState(); // ✅ correct place
+    resetTurnState(); // reset per-question state when opening a fresh tile
 }
-
 
 // Lock box after answered
 function lockQuestion(level, index) {
@@ -799,3 +799,14 @@ function updateCircle(time, color, max) {
   if (startBtn) startBtn.onclick = startRound;
 })();
 
+
+/* Expose some functions to global window so inline HTML buttons can call them */
+window.startRound = startRound;
+window.resetGame = resetGame;
+window.selectTeam = selectTeam;
+window.submitAnswer = submitAnswer;
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.saveSettings = saveSettings;
+window.showBoard = showBoard;
+window.teamBuzz = teamBuzz;
