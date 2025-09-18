@@ -326,7 +326,11 @@ function selectTeam(team) {
 /* Team clicks the buzzer -> write to DB if allowed */
 async function teamBuzz() {
     let team = sessionStorage.getItem("team");
-    if (!team) return alert("Please select a team first.");
+    if (!team) {
+    console.log("⚠ Please select a team first.");
+    return;
+}
+
     // check if allowed
     const enable = dbState.state.enableBuzzer === true;
     const alreadyBuzzed = dbState.state.buzzed;
@@ -419,7 +423,12 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
 function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
     playSound("wrongSound"); // cue
-    alert("No team answered correctly. Correct answer is: " + correct);
+    // alert("No team answered correctly. Correct answer is: " + correct);
+if (document.getElementById("submittedAnswer")) {
+    document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
+}
+console.log("No team answered correctly. Correct: " + correct);
+
 
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
@@ -480,7 +489,9 @@ setInterval(async() => {
 
                 updateScores();
                 highlightScore(buzzed);
-                alert(buzzed + " is CORRECT! +" + points + " pts");
+                // alert(buzzed + " is CORRECT! +" + points + " pts");
+                console.log(`${buzzed} is CORRECT! +${points} pts`);
+
 
                 // stop timers and lock the question
                 clearInterval(countdownInterval);
@@ -670,7 +681,9 @@ function closeSettingsModal() {
 function saveSettings() {
     buzzTime = parseInt(document.getElementById("buzzTimeInput").value) || 10;
     answerTime = parseInt(document.getElementById("answerTimeInput").value) || 20;
-    alert("Settings saved! Buzz Time: " + buzzTime + "s, Answer Time: " + answerTime + "s");
+    // alert("Settings saved! Buzz Time: " + buzzTime + "s, Answer Time: " + answerTime + "s");
+console.log(`Settings saved! Buzz: ${buzzTime}s, Answer: ${answerTime}s`);
+
     if (mode === "buzz") {
         timeLeft = buzzTime;
         updateCircle(buzzTime, "lime", buzzTime);
@@ -693,3 +706,4 @@ window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
 window.showBoard = showBoard;
 window.teamBuzz = teamBuzz;
+
