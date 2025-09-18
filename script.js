@@ -1,4 +1,3 @@
-
 // ================= FIREBASE INIT =================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, onValue, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
@@ -21,7 +20,7 @@ const db = getDatabase(app);
 const dbRef = (path) => ref(db, path);
 const dbSet = (path, val) => set(dbRef(path), val);
 const dbRemove = (path) => remove(dbRef(path));
-const dbGet = (path) => get(path);
+const dbGet = (path) => get(dbRef(path)); // fixed
 const dbChild = (parent, key) => child(parent, key);
 const dbOnValue = (path, cb) => onValue(dbRef(path), cb);
 
@@ -105,7 +104,7 @@ const questions = {
 
 // ----------------- helpers for per-question state -----------------
 async function getOutTeams() {
-  const snapshot = await dbGet(dbRef("outTeams"));
+  const snapshot = await dbGet("outTeams");
   return snapshot.exists() ? snapshot.val() : [];
 }
 
@@ -124,15 +123,9 @@ async function resetTurnState() {
     dbSet("outTeams", [])
   ]);
 
-  if (document.getElementById("submittedAnswer")) {
-    document.getElementById("submittedAnswer").innerText = "⏳";
-  }
-  if (document.getElementById("firstBuzz")) {
-    document.getElementById("firstBuzz").innerText = "None yet";
-  }
-  if (document.getElementById("stealNotice")) {
-    document.getElementById("stealNotice").innerText = "";
-  }
+  document.getElementById("submittedAnswer")?.innerText = "⏳";
+  document.getElementById("firstBuzz")?.innerText = "None yet";
+  document.getElementById("stealNotice")?.innerText = "";
 }
 
 // ================= ADMIN FUNCTIONS =================
@@ -219,16 +212,14 @@ async function resetGame() {
   scores = { Zack: 0, Ryan: 0, Kyle: 0 };
   await dbSet("scores", scores);
   updateScores();
-  await dbRemove(""); // clear root
+  await remove(ref(db)); // fixed
   location.reload();
 }
 
 function updateScores() {
-  if (document.getElementById("scoreZack")) {
-    document.getElementById("scoreZack").innerText = scores.Zack;
-    document.getElementById("scoreRyan").innerText = scores.Ryan;
-    document.getElementById("scoreKyle").innerText = scores.Kyle;
-  }
+  document.getElementById("scoreZack")?.innerText = scores.Zack;
+  document.getElementById("scoreRyan")?.innerText = scores.Ryan;
+  document.getElementById("scoreKyle")?.innerText = scores.Kyle;
 }
 
 function highlightScore(team) {
@@ -241,7 +232,7 @@ function highlightScore(team) {
 
 // ================= TEAM FUNCTIONS =================
 function selectTeam(team) {
-  sessionStorage.setItem("team", team); // stays local
+  sessionStorage.setItem("team", team);
   document.getElementById("teamSelect").style.display = "none";
   document.getElementById("buzzerArea").style.display = "block";
   document.getElementById("teamName").innerText = "You are " + team;
@@ -258,36 +249,33 @@ function submitAnswer() {
   }
 }
 
-// ================= BUZZ LISTENER =================
-dbOnValue("buzzed", (snapshot) => {
-  const team = snapshot.val();
-  if (team) {
-    document.getElementById("firstBuzz").textContent = team;
-    dbSet("answeringTeam", team);
-    dbSet("enableBuzzer", false);
-    switchToAnswer(team);
-  }
-});
+// ================= HANDLE WRONG/TIMEOUT =================
+function handleTeamWrongOrTimeout(team, reason) {
+  getOutTeams().then(outs => {
+    outs.push(team);
+    setOutTeams(outs);
+    dbSet("stealMode", team);
+    const el = document.getElementById("stealNotice");
+    if (el) el.innerText = `${team} is out (${reason}). Other teams can steal!`;
+  });
+}
 
-// ================= AUTO-CHECK BUZZ =================
+// ================= BUZZ LISTENER =================
 dbOnValue("buzzed", async (snapshot) => {
   const buzzed = snapshot.val();
   if (!buzzed) return;
 
   document.getElementById("firstBuzz").innerText = buzzed;
+  dbSet("answeringTeam", buzzed);
   dbSet("enableBuzzer", false);
+  switchToAnswer(buzzed);
 
-  if (!answerTimerInterval) {
-    startAnswerTimer(buzzed);
-  }
-
-  const ansSnap = await dbGet(dbRef("teamAnswer_" + buzzed));
+  // wait for team answer
+  const ansSnap = await dbGet("teamAnswer_" + buzzed);
   let ans = ansSnap.exists() ? ansSnap.val() : "";
 
   if (ans) {
-    if (document.getElementById("submittedAnswer")) {
-      document.getElementById("submittedAnswer").innerText = "📝 " + ans;
-    }
+    document.getElementById("submittedAnswer")?.innerText = "📝 " + ans;
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 
@@ -295,6 +283,7 @@ dbOnValue("buzzed", async (snapshot) => {
     if (ans.trim().toLowerCase() === correctAns) {
       playSound("correctSound");
       let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
+      if (!scores[buzzed]) scores[buzzed] = 0;
       scores[buzzed] += points;
       dbSet("scores", scores);
       updateScores();
@@ -306,9 +295,7 @@ dbOnValue("buzzed", async (snapshot) => {
       document.getElementById("circleTime").textContent = "0";
       updateCircle(0, "lime", answerTime);
 
-      if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
-      }
+      document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
 
       lockQuestion(currentLevel, currentQIndex);
       dbRemove("buzzed");
@@ -328,10 +315,10 @@ dbOnValue("buzzed", async (snapshot) => {
 if (document.getElementById("buzzerBtn")) {
   dbOnValue("enableBuzzer", async (snapshot) => {
     let enable = snapshot.val() === true;
-    let stealFromSnap = await dbGet(dbRef("stealMode"));
+    let stealFromSnap = await dbGet("stealMode");
     let stealFrom = stealFromSnap.exists() ? stealFromSnap.val() : null;
     let team = sessionStorage.getItem("team");
-    let buzzedSnap = await dbGet(dbRef("buzzed"));
+    let buzzedSnap = await dbGet("buzzed");
     let alreadyBuzzed = buzzedSnap.exists() ? buzzedSnap.val() : "";
     const outs = await getOutTeams();
 
@@ -406,7 +393,6 @@ function lockQuestion(level, index) {
   }
 }
 
-
 // Expose functions globally for buttons
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
@@ -416,4 +402,3 @@ window.resetGame = resetGame;
 window.showBoard = showBoard;
 window.revealQuestion = revealQuestion;
 window.lockQuestion = lockQuestion;
-
