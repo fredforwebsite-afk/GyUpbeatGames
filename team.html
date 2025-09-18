@@ -120,19 +120,22 @@
     }
 
     // ---- Submit Answer ----
-    async function submitAnswer() {
-      let ans = document.getElementById("teamAnswer").value;
-      if (ans.trim() === "") return;
+async function submitAnswer() {
+  let ans = document.getElementById("teamAnswer").value;
+  if (ans.trim() === "") return;
 
-      await set(ref(db, "teamAnswers/" + teamName), ans);
-      await set(ref(db, "submittedAnswer"), teamName + ": " + ans);
+  // ✅ Save in the same place admin expects
+  await set(ref(db, "teamAnswer_" + teamName), ans);
+  await set(ref(db, "submittedAnswer"), ans);
 
-      document.getElementById("answerArea").style.display = "none";
-      clearInterval(answerInterval);
-    }
+  document.getElementById("answerArea").style.display = "none";
+  clearInterval(answerInterval);
+}
+
     window.submitAnswer = submitAnswer;
   </script>
 </body>
 
 </html>
+
 
