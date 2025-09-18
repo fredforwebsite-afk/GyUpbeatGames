@@ -5,6 +5,9 @@
   <meta charset="UTF-8">
   <title>Admin Panel</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* (same styles as before) */
+  </style>
 </head>
 
 <body>
@@ -38,11 +41,10 @@
     <!-- Steal Notice -->
     <div id="stealNotice" style="color:orange;font-weight:bold;margin-top:10px;"></div>
 
-<div id="levelSelect">
-  <button class="level-btn" onclick="showBoard('easy', this)">Easy (100 pts)</button>
-  <button class="level-btn" onclick="showBoard('medium', this)">Medium (300 pts)</button>
-  <button class="level-btn" onclick="showBoard('hard', this)">Hard (500 pts)</button>
-</div>
+    <h2>Choose Level:</h2>
+    <button class="level-btn" onclick="showBoard('easy', this)">Easy (100 pts)</button>
+    <button class="level-btn" onclick="showBoard('medium', this)">Medium (300 pts)</button>
+    <button class="level-btn" onclick="showBoard('hard', this)">Hard (500 pts)</button>
 
     <!-- Question Grid -->
     <div id="questionBox" class="board"></div>
@@ -93,13 +95,8 @@
   <audio id="beepHighSound" src="sound/countdown2.wav" preload="auto"></audio>
   <audio id="timesUpSound" src="sound/timesup.wav" preload="auto"></audio>
 
-  <!-- Firebase + Script -->
-<script type="module" src="script.js"></script>
-
-
+  <!-- Script (now holds Firebase + logic) -->
+  <script type="module" src="script.js"></script>
 </body>
 
 </html>
-
-
-
