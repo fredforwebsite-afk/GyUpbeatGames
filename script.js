@@ -247,8 +247,8 @@ function saveSettings() {
     const b = document.getElementById("buzzTimeInput");
     const a = document.getElementById("answerTimeInput");
 
-    buzzTime = parseInt(b ? .value || "") || 10;
-    answerTime = parseInt(a ? .value || "") || 20;
+    buzzTime = parseInt(b? .value || "") || 10;
+    answerTime = parseInt(a? .value || "") || 20;
 
     alert("Settings saved! Buzz Time: " + buzzTime + "s, Answer Time: " + answerTime + "s");
 
@@ -802,3 +802,4 @@ setInterval(async() => {
 
     console.log("Firebase quiz module initialized.");
 })();
+
