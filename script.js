@@ -406,11 +406,14 @@ function lockQuestion(level, index) {
   }
 }
 
-window.startRound = startRound;
-window.resetGame = resetGame;
+
+// Expose functions globally for buttons
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
+window.startRound = startRound;
+window.resetGame = resetGame;
 window.showBoard = showBoard;
-
+window.revealQuestion = revealQuestion;
+window.lockQuestion = lockQuestion;
 
