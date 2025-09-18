@@ -806,3 +806,10 @@ resetTurnState = function() {
     stealUsed = false;
     originalResetTurnState();
 };
+
+window.startRound = startRound;
+window.showBoard = showBoard;
+window.resetGame = resetGame;
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.saveSettings = saveSettings;
