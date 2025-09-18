@@ -1,4 +1,4 @@
-<script type="module">
+
 // ================= FIREBASE INIT =================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, onValue, remove } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
@@ -406,4 +406,11 @@ function lockQuestion(level, index) {
   }
 }
 
-</script>
+window.startRound = startRound;
+window.resetGame = resetGame;
+window.openSettingsModal = openSettingsModal;
+window.closeSettingsModal = closeSettingsModal;
+window.saveSettings = saveSettings;
+window.showBoard = showBoard;
+
+
