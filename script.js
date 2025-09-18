@@ -682,16 +682,22 @@ function saveSettings() {
     closeSettingsModal();
 }
 
-/* Expose some functions to global window so inline HTML buttons can call them */
+
+/* ================= Expose functions globally ================= */
+// Admin functions
 window.startRound = startRound;
 window.resetGame = resetGame;
-window.selectTeam = selectTeam;
-window.submitAnswer = submitAnswer;
+window.showBoard = showBoard;
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
-window.showBoard = showBoard;
+
+// Team functions
+window.selectTeam = selectTeam;
 window.teamBuzz = teamBuzz;
+window.submitAnswer = submitAnswer;
+
 </script>
+
 
 
