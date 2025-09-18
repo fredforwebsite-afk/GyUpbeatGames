@@ -303,7 +303,7 @@ circle.progress {
 }
 
 #settingsModal {
-  display: none; /* Hide initially */
+  display: none; /* must be none by default */
   position: fixed;
   top: 0; left: 0;
   width: 100%; height: 100%;
@@ -311,7 +311,13 @@ circle.progress {
   z-index: 9999;
   align-items: center;
   justify-content: center;
+  pointer-events: auto; /* allow clicks when open */
 }
+
+#settingsModal[style*="display: none"] {
+  pointer-events: none; /* prevent blocking when hidden */
+}
+
 
 
 
@@ -370,5 +376,6 @@ circle.progress {
     font-size: 26px;
     cursor: pointer;
 }
+
 
 
