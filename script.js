@@ -6,182 +6,234 @@ import {
   set,
   update,
   onValue,
-  push,
   remove,
   get,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
-    authDomain: "gygames-fafcb.firebaseapp.com",
-    databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
-    projectId: "gygames-fafcb",
-    storageBucket: "gygames-fafcb.firebasestorage.app",
-    messagingSenderId: "603231637988",
-    appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
-    measurementId: "G-058J8NLC43"
+  apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
+  authDomain: "gygames-fafcb.firebaseapp.com",
+  databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
+  projectId: "gygames-fafcb",
+  storageBucket: "gygames-fafcb.firebasestorage.app",
+  messagingSenderId: "603231637988",
+  appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+  measurementId: "G-058J8NLC43"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-/* ================== Realtime state mirror ==================
- We'll keep a local snapshot of the DB at /game/... so the rest of
- your code can use synchronous reads from this snapshot while
- writes go to firebase.
-===========================================================*/
+/* ================== GLOBAL VARS ================== */
+let teamName = null;
+let answerInterval;
+let answerTimer = 20;
 
-const stateRefRoot = ref(db, 'game');
-const state = {
-  scores: { Zack: 0, Ryan: 0, Kyle: 0 },
-  outTeams: [],
-  buzzed: "",
-  enableBuzzer: false,
-  answeringTeam: "",
-  stealMode: "",
-  submittedAnswer: "",
-  teamAnswers: {}, // team -> answer
-  currentQuestion: "",
-  stealUsed: false,
-  settings: { buzzTime: 10, answerTime: 20 }
+/* ================== TEAM SELECT ================== */
+function selectTeam(name) {
+  teamName = name;
+  sessionStorage.setItem("team", teamName);
+
+  document.getElementById("teamSelect").style.display = "none";
+  document.getElementById("buzzerArea").style.display = "block";
+  document.getElementById("teamName").innerText = "You are Team " + teamName;
+}
+
+/* ================== BUZZER ENABLE LISTENER ================== */
+setInterval(async () => {
+  let enableSnap = await get(ref(db, "game/enableBuzzer"));
+  let stealSnap = await get(ref(db, "game/stealMode"));
+  let buzzedSnap = await get(ref(db, "game/buzzed"));
+
+  let enable = enableSnap.exists() ? enableSnap.val() === "true" : false;
+  let steal = stealSnap.exists() ? stealSnap.val() : null;
+  let alreadyBuzzed = buzzedSnap.exists() ? buzzedSnap.val() : null;
+
+  if (teamName) {
+    if ((enable && !alreadyBuzzed) || (steal && steal !== teamName && !alreadyBuzzed)) {
+      document.getElementById("buzzerBtn").disabled = false;
+    } else {
+      document.getElementById("buzzerBtn").disabled = true;
+    }
+  }
+}, 300);
+
+/* ================== BUZZER BUTTON ================== */
+document.getElementById("buzzerBtn").onclick = async () => {
+  if (!teamName) return;
+
+  await set(ref(db, "game/buzzed"), teamName);
+
+  document.getElementById("buzzerBtn").disabled = true;
+  document.getElementById("answerArea").style.display = "block";
+
+  startAnswerTimer();
+  document.getElementById("buzzSound").play();
 };
 
-// Write helper: updates a path in /game
-function dbSet(path, value) {
-  return set(ref(db, `game/${path}`), value);
-}
+/* ================== ANSWER TIMER ================== */
+function startAnswerTimer() {
+  clearInterval(answerInterval);
+  answerTimer = 20;
+  document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
 
-function dbRemove(path) {
-  return remove(ref(db, `game/${path}`));
-}
+  answerInterval = setInterval(() => {
+    answerTimer--;
+    document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
 
-function dbUpdate(obj) {
-  // obj is relative keys under /game
-  return update(ref(db, 'game'), obj);
-}
-
-// initialize default DB values if missing (one-time)
-async function ensureInitialState() {
-  try {
-    const snap = await get(stateRefRoot);
-    if (!snap.exists()) {
-      await set(stateRefRoot, {
-        scores: state.scores,
-        outTeams: state.outTeams,
-        buzzed: "",
-        enableBuzzer: false,
-        answeringTeam: "",
-        stealMode: "",
-        submittedAnswer: "",
-        teamAnswers: {},
-        currentQuestion: "",
-        stealUsed: false,
-        settings: { buzzTime: buzzTime, answerTime: answerTime }
-      });
-    } else {
-      // fill local state with returned values (so UI starts with proper state)
-      const val = snap.val();
-      if (val.scores) state.scores = val.scores;
-      if (val.outTeams) state.outTeams = val.outTeams;
-      if (typeof val.buzzed !== 'undefined') state.buzzed = val.buzzed;
-      if (typeof val.enableBuzzer !== 'undefined') state.enableBuzzer = val.enableBuzzer;
-      if (val.answeringTeam) state.answeringTeam = val.answeringTeam;
-      if (val.stealMode) state.stealMode = val.stealMode;
-      if (typeof val.submittedAnswer !== 'undefined') state.submittedAnswer = val.submittedAnswer;
-      if (val.teamAnswers) state.teamAnswers = val.teamAnswers;
-      if (val.currentQuestion) state.currentQuestion = val.currentQuestion;
-      if (typeof val.stealUsed !== 'undefined') state.stealUsed = val.stealUsed;
-      if (val.settings) state.settings = val.settings;
+    if (answerTimer <= 0) {
+      clearInterval(answerInterval);
+      document.getElementById("answerTimer").innerText = "⏳ Time's up!";
+      document.getElementById("answerArea").style.display = "none";
     }
-  } catch (err) {
-    console.error("Error ensuring initial state:", err);
-  }
+  }, 1000);
 }
 
-// Setup realtime listeners to update our local state mirror
-onValue(stateRefRoot, (snapshot) => {
-  const val = snapshot.val() || {};
-  // Update local snapshot for keys if present
-  if (val.scores) state.scores = val.scores;
-  if (val.outTeams) state.outTeams = val.outTeams;
-  if (typeof val.buzzed !== 'undefined') state.buzzed = val.buzzed;
-  if (typeof val.enableBuzzer !== 'undefined') state.enableBuzzer = val.enableBuzzer;
-  if (typeof val.answeringTeam !== 'undefined') state.answeringTeam = val.answeringTeam;
-  if (typeof val.stealMode !== 'undefined') state.stealMode = val.stealMode;
-  if (typeof val.submittedAnswer !== 'undefined') state.submittedAnswer = val.submittedAnswer;
-  if (val.teamAnswers) state.teamAnswers = val.teamAnswers;
-  if (typeof val.currentQuestion !== 'undefined') state.currentQuestion = val.currentQuestion;
-  if (typeof val.stealUsed !== 'undefined') state.stealUsed = val.stealUsed;
-  if (val.settings) state.settings = val.settings;
+/* ================== SUBMIT ANSWER ================== */
+async function submitAnswer() {
+  let ans = document.getElementById("teamAnswer").value;
+  if (ans.trim() === "") return;
 
-  // Whenever the DB updates, reflect to UI where needed
-  updateScores();
-  reflectBuzzToAdmin();
-  reflectSubmittedAnswerToAdmin();
-  reflectOutTeamsUI();
-});
+  await set(ref(db, "game/teamAnswer_" + teamName), ans);
+  await set(ref(db, "game/submittedAnswer"), teamName + ": " + ans);
 
-// small convenience getters (synchronous reads from local snapshot)
-function getState(key) {
-  return state[key];
+  document.getElementById("answerArea").style.display = "none";
+  clearInterval(answerInterval);
 }
 
-// helpers that were using localStorage before:
-/* - scores => state.scores
-   - getOutTeams/setOutTeams => state.outTeams + db
-   - buzzed => state.buzzed
-   - enableBuzzer => state.enableBuzzer
-   - teamAnswer_<team> => state.teamAnswers[team]
-   - submittedAnswer => state.submittedAnswer
-   - stealMode => state.stealMode
-   - currentQuestion => state.currentQuestion
-*/
 
-function getOutTeamsLocal() {
-  return state.outTeams || [];
-}
-function setOutTeamsDB(arr) {
-  state.outTeams = arr;
-  return dbSet('outTeams', arr);
+// ================= FIREBASE-BACKED KEY/VALUE CACHE =================
+// Purpose: provide a drop-in replacement for localStorage.getItem/setItem/removeItem
+// while keeping the rest of your code synchronous (it reads strings).
+const fbRootPath = 'game'; // root path in RTDB to store keys
+const fbCache = {};        // in-memory cache mirroring firebase values
+const fbUnsubs = {};       // holds unsubscribe functions for listeners
+
+// Helpers to form refs
+const nodeRef = (key) => ref(db, `${fbRootPath}/${key}`);
+
+// Initialize: load initial keys we care about and attach listeners that keep cache updated.
+// We'll listen to: scores, buzzed, enableBuzzer, answeringTeam, stealMode, outTeams, teamAnswer_<team>, submittedAnswer
+async function initFirebaseKV(keysToWatch = []) {
+    // attach onValue listeners for keysToWatch so cache stays up to date
+    keysToWatch.forEach(key => {
+        // avoid double-subscribe
+        if (fbUnsubs[key]) return;
+        const r = nodeRef(key);
+        const unsub = onValue(r, (snap) => {
+            const val = snap.exists() ? snap.val() : null;
+            // We'll store string values in cache (like localStorage) — null means "no key"
+            fbCache[key] = (val === null || val === undefined) ? null : val;
+            // Special behavior: emulate the previous storage event for "buzzed"
+            if (key === 'buzzed' && fbCache['buzzed']) {
+                // call stopOnBuzz with a storage-like event object so your existing stopOnBuzz works unchanged
+                try {
+                    stopOnBuzz({ key: 'buzzed', newValue: fbCache['buzzed'] });
+                } catch (err) {
+                    // if stopOnBuzz doesn't exist yet (early init), ignore
+                }
+            }
+        });
+        fbUnsubs[key] = unsub;
+    });
 }
 
-/* ================ Keep your app variables ================ */
+// Basic "localStorage-like" API (synchronous reads from in-memory cache)
+function fbSetItem(key, value) {
+    // store exactly what localStorage would store: strings (but allow null to remove)
+    const r = nodeRef(key);
+    if (value === null || value === undefined) {
+        remove(r).catch(() => {}); // remove from firebase
+        fbCache[key] = null;
+    } else {
+        // if value is object, convert to JSON string? To mimic localStorage behavior, only strings should be passed.
+        // We'll store as-is (string or primitive) because your code usually passes strings (JSON stringified where needed).
+        set(r, value).catch(() => {});
+        fbCache[key] = value;
+    }
+}
+
+function fbGetItem(key) {
+    // synchronous read from cache; returns string or null like localStorage.getItem
+    return (fbCache.hasOwnProperty(key) && fbCache[key] !== null) ? fbCache[key] : null;
+}
+
+function fbRemoveItem(key) {
+    const r = nodeRef(key);
+    remove(r).catch(() => {});
+    fbCache[key] = null;
+}
+
+function fbClearAll() {
+    // remove the whole root node (be careful); to mimic localStorage.clear
+    const r = ref(db, fbRootPath);
+    remove(r).catch(() => {});
+    // clear local cache
+    Object.keys(fbCache).forEach(k => fbCache[k] = null);
+}
+
+// Start listening to the commonly used keys right away
+initFirebaseKV([
+    "scores",
+    "buzzed",
+    "enableBuzzer",
+    "answeringTeam",
+    "stealMode",
+    "outTeams",
+    "submittedAnswer",
+    // teamAnswer_<team> keys will be created on demand; we can optionally add listeners when needed
+]);
+
+// convenience: ensure team-specific answer listener subscription when needed
+function ensureTeamAnswerWatch(team) {
+    const key = `teamAnswer_${team}`;
+    if (!fbUnsubs[key]) {
+        const r = nodeRef(key);
+        fbUnsubs[key] = onValue(r, (snap) => {
+            fbCache[key] = snap.exists() ? snap.val() : null;
+        });
+    }
+}
+
+// ================= VARIABLES ================= 
+// Keep scores in-memory same as before, but populate from firebase cache (stringified JSON) if present
+let scores = { Zack: 0, Ryan: 0, Kyle: 0 };
+const initialScoresVal = fbGetItem("scores");
+if (initialScoresVal) {
+    try {
+        scores = JSON.parse(initialScoresVal);
+    } catch (err) {
+        // fallback to defaults
+    }
+}
+
 let currentLevel = "easy";
 let currentQIndex = 0;
 let timerInterval;
 let answerTimerInterval;
 
-let buzzTime = 10; // defaults (will be synced from DB if set)
-let answerTime = 20;
+let buzzTime = 10; // ✅ default 10s
+let answerTime = 20; // ✅ default 20s
 
-let countdownInterval;
-let timeLeft = buzzTime;
-let mode = "buzz"; // "buzz" or "answer"
-
-/* ================ SETTINGS (modal) ================ */
+// ================= SETTINGS =================
 function openSettingsModal() {
     document.getElementById("settingsModal").style.display = "flex";
-    // use state.settings if present
-    const s = getState('settings') || {buzzTime, answerTime};
-    document.getElementById("buzzTimeInput").value = s.buzzTime ?? buzzTime;
-    document.getElementById("answerTimeInput").value = s.answerTime ?? answerTime;
+    document.getElementById("buzzTimeInput").value = buzzTime;
+    document.getElementById("answerTimeInput").value = answerTime;
 }
 
 function closeSettingsModal() {
     document.getElementById("settingsModal").style.display = "none";
 }
 
-async function saveSettings() {
+function saveSettings() {
     buzzTime = parseInt(document.getElementById("buzzTimeInput").value) || 10;
     answerTime = parseInt(document.getElementById("answerTimeInput").value) || 20;
 
-    // persist to DB
-    await dbSet('settings', { buzzTime, answerTime });
-
     alert("Settings saved! Buzz Time: " + buzzTime + "s, Answer Time: " + answerTime + "s");
 
-    // Update circle immediately if a round is running
+    // ✅ Update circle immediately if a round is running
     if (mode === "buzz") {
         timeLeft = buzzTime;
         updateCircle(buzzTime, "lime", buzzTime);
@@ -195,9 +247,7 @@ async function saveSettings() {
     closeSettingsModal();
 }
 
-/* ================= QUESTIONS =================
-   (kept identical to your original questions)
-*/
+// ================= QUESTIONS =================
 const questions = {
     easy: [
         { q: "Who was the first President of the United States?", a: "George Washington" },
@@ -231,29 +281,25 @@ const questions = {
     ]
 };
 
-/* ================= helpers for per-question state (replaced localStorage functions) ================= */
-
-// getOutTeams now uses local state mirror
+// ----------------- helpers for per-question state -----------------
 function getOutTeams() {
-    return getOutTeamsLocal();
+    try {
+        const raw = fbGetItem("outTeams");
+        return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
 }
 
-// resetTurnState: clear per-question DB keys and local flags
-async function resetTurnState() {
+function setOutTeams(arr) {
+    fbSetItem("outTeams", JSON.stringify(arr));
+}
+
+function resetTurnState() {
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
-
-    // clear DB keys that were previously in localStorage
-    await dbUpdate({
-      buzzed: "",
-      stealMode: "",
-      submittedAnswer: "",
-      answeringTeam: ""
-    });
-
-    await setOutTeamsDB([]);
-    stealUsed = false;
-
+    fbRemoveItem("buzzed");
+    fbRemoveItem("stealMode");
+    fbRemoveItem("submittedAnswer");
+    setOutTeams([]);
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "⏳";
     }
@@ -265,81 +311,73 @@ async function resetTurnState() {
     }
 }
 
-/* ================= ADMIN FUNCTIONS ================= */
+// ================= ADMIN FUNCTIONS =================
+let countdownInterval;
+let timeLeft = buzzTime;
+let mode = "buzz"; // "buzz" or "answer"
 
-function updateScores() {
-    if (document.getElementById("scoreZack")) {
-        const s = getState('scores') || {Zack:0,Ryan:0,Kyle:0};
-        document.getElementById("scoreZack").innerText = s.Zack ?? 0;
-        document.getElementById("scoreRyan").innerText = s.Ryan ?? 0;
-        document.getElementById("scoreKyle").innerText = s.Kyle ?? 0;
-    }
-}
+// We'll keep a reference to the buzzer firebase unsubscribe so we can remove it (mimics removeEventListener)
+let buzzedUnsub = null;
 
-function highlightScore(team) {
-    let td = document.getElementById("score" + team);
-    if (td) {
-        td.classList.add("highlight");
-        setTimeout(() => td.classList.remove("highlight"), 1000);
-    }
-}
-
-// reflect outTeams to UI (if you have some visual)
-function reflectOutTeamsUI() {
-  // implement as desired; placeholder to keep parity with previous UI updates
-  // e.g. show which teams are out in an element with id outTeamsList
-  const outs = getOutTeams();
-  const el = document.getElementById('outTeamsList');
-  if (el) {
-    el.innerText = outs.join(', ');
-  }
-}
-
-async function startRound() {
+function startRound() {
     clearInterval(countdownInterval);
-    timeLeft = getState('settings')?.buzzTime ?? buzzTime;
+    timeLeft = buzzTime;
     mode = "buzz";
 
-    await resetTurnState();
+    resetTurnState();
+    fbSetItem("enableBuzzer", "true");
+    fbSetItem("buzzed", ""); // empty string means no one yet
+    fbSetItem("answeringTeam", "");
 
-    // enable buzzer in DB
-    await dbSet('enableBuzzer', true);
-    await dbSet('buzzed', "");
-    await dbSet('answeringTeam', "");
-
-    updateCircle(timeLeft, "lime", timeLeft);
+    updateCircle(buzzTime, "lime", buzzTime);
     document.getElementById("circleTime").textContent = timeLeft;
-    if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "None yet";
-    if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = ""; // clear message
+    document.getElementById("firstBuzz").textContent = "None yet";
+    document.getElementById("stealNotice").textContent = ""; // clear message
 
-    // start timer
+    // Subscribe to firebase "buzzed" changes and call stopOnBuzz with storage-like event
+    if (buzzedUnsub) {
+        try { buzzedUnsub(); } catch (e) {}
+        buzzedUnsub = null;
+    }
+    buzzedUnsub = onValue(nodeRef("buzzed"), (snap) => {
+        const val = snap.exists() ? snap.val() : null;
+        if (val) {
+            // call your existing stopOnBuzz handler with event-like object
+            stopOnBuzz({ key: "buzzed", newValue: val });
+        }
+    });
+
     countdownInterval = setInterval(runTimer, 1000);
 }
 
 function runTimer() {
     timeLeft--;
-    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+    document.getElementById("circleTime").textContent = timeLeft;
 
     if (mode === "buzz") {
-        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", getState('settings')?.buzzTime ?? buzzTime);
+        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
 
         if (timeLeft > 5) playSound("beepSound");
         else if (timeLeft > 0) playSound("beepHighSound");
 
         if (timeLeft <= 0) {
+            // nobody buzzed
             clearInterval(countdownInterval);
-            dbSet('enableBuzzer', false);
+            fbSetItem("enableBuzzer", "false");
+            if (buzzedUnsub) {
+                try { buzzedUnsub(); } catch (e) {}
+                buzzedUnsub = null;
+            }
+
             document.getElementById("circleTime").textContent = "⏳ No Buzz";
             playSound("timesUpSound");
 
-            // show admin option to retry
-            if (document.getElementById("stealNotice")) {
-                document.getElementById("stealNotice").innerHTML =
-                    `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
-            }
+            // ✅ show admin option to retry
+            document.getElementById("stealNotice").innerHTML =
+                `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
         }
     } else if (mode === "answer") {
-        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", getState('settings')?.answerTime ?? answerTime);
+        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
 
         if (timeLeft > 5) playSound("beepSound");
         else if (timeLeft > 0) playSound("beepHighSound");
@@ -352,38 +390,48 @@ function runTimer() {
     }
 }
 
-// When buzzed is changed in DB, admin should notice and switchToAnswer
-function reflectBuzzToAdmin() {
-  const buzzer = getState('buzzed') || "";
-  if (buzzer && document.getElementById("firstBuzz")) {
-    document.getElementById("firstBuzz").textContent = buzzer;
-    dbSet('answeringTeam', buzzer);
-    dbSet('enableBuzzer', false);
-    switchToAnswer(buzzer);
-  }
+// 🛑 If a team buzzes early
+function stopOnBuzz(e) {
+    if (e.key === "buzzed" && e.newValue) {
+        const team = e.newValue;
+        document.getElementById("firstBuzz").textContent = team;
+        fbSetItem("answeringTeam", team);
+        fbSetItem("enableBuzzer", "false");
+        switchToAnswer(team);
+    }
 }
 
-// When submittedAnswer is changed, reflect
-function reflectSubmittedAnswerToAdmin() {
-  const submitted = getState('submittedAnswer') || "";
-  if (submitted && document.getElementById("submittedAnswer")) {
-    document.getElementById("submittedAnswer").innerText = submitted;
-  }
-}
 
-// If a client writes buzzed in DB, the admin's onValue will call reflectBuzzToAdmin -> switchToAnswer
+// 🔄 Switch from buzz mode to answer mode
 function switchToAnswer(team) {
     clearInterval(countdownInterval);
     mode = "answer";
-    timeLeft = getState('settings')?.answerTime ?? answerTime;
+    timeLeft = answerTime;
 
-    updateCircle(timeLeft, "yellow", timeLeft);
+    updateCircle(answerTime, "yellow", answerTime);
     document.getElementById("circleTime").textContent = timeLeft;
 
     countdownInterval = setInterval(runTimer, 1000);
+    // stop listening for firebase buzz updates (we only want it during buzz mode)
+    if (buzzedUnsub) {
+        try { buzzedUnsub(); } catch (e) {}
+        buzzedUnsub = null;
+    }
 }
 
-// playSound kept same
+// 🎨 Update circle progress
+function updateCircle(time, color, max) {
+    const circle = document.getElementById("circleProgress");
+    const radius = 54;
+    const circumference = 2 * Math.PI * radius;
+    const progress = Math.max(time, 0) / max;
+
+    circle.style.strokeDasharray = circumference;
+    circle.style.strokeDashoffset = circumference - progress * circumference;
+    circle.style.stroke = color;
+}
+
+// 🔊 Sound helper
 function playSound(id) {
     const el = document.getElementById(id);
     if (el) {
@@ -392,59 +440,61 @@ function playSound(id) {
     }
 }
 
-// resetGame - reset DB and local UI
-async function resetGame() {
-    state.scores = { Zack: 0, Ryan: 0, Kyle: 0 };
-    await dbSet('scores', state.scores);
+function resetGame() {
+    scores = { Zack: 0, Ryan: 0, Kyle: 0 };
+    fbSetItem("scores", JSON.stringify(scores));
     updateScores();
-    // clear game root
-    await set(stateRefRoot, {
-      scores: state.scores,
-      outTeams: [],
-      buzzed: "",
-      enableBuzzer: false,
-      answeringTeam: "",
-      stealMode: "",
-      submittedAnswer: "",
-      teamAnswers: {},
-      currentQuestion: "",
-      stealUsed: false,
-      settings: { buzzTime: buzzTime, answerTime: answerTime }
-    });
-
-    // reload the page to ensure clean state (optional)
+    fbClearAll();
     location.reload();
 }
 
-/* ================= TEAM FUNCTIONS (client side) ================= */
+function updateScores() {
+    // Try to pull latest from firebase cache first
+    const raw = fbGetItem("scores");
+    if (raw) {
+        try {
+            scores = JSON.parse(raw);
+        } catch (e) {}
+    }
+    if (document.getElementById("scoreZack")) {
+        document.getElementById("scoreZack").innerText = scores.Zack;
+        document.getElementById("scoreRyan").innerText = scores.Ryan;
+        document.getElementById("scoreKyle").innerText = scores.Kyle;
+    }
+}
 
+function highlightScore(team) {
+    let td = document.getElementById("score" + team);
+    if (td) {
+        td.classList.add("highlight");
+        setTimeout(() => td.classList.remove("highlight"), 1000);
+    }
+}
+
+// ================= TEAM FUNCTIONS =================
 function selectTeam(team) {
+    // sessionStorage is client-local and identifies which team this browser is
     sessionStorage.setItem("team", team);
     document.getElementById("teamSelect").style.display = "none";
     document.getElementById("buzzerArea").style.display = "block";
     document.getElementById("teamName").innerText = "You are " + team;
 }
 
-async function submitAnswer() {
+function submitAnswer() {
     let team = sessionStorage.getItem("team");
     let ans = document.getElementById("teamAnswer").value;
     if (team && ans) {
-        // write to DB under teamAnswers and also set submittedAnswer for Admin display
-        const updates = {};
-        updates[`teamAnswers/${team}`] = ans;
-        updates['submittedAnswer'] = ans;
-        await dbUpdate(updates);
-
-        if (document.getElementById("answerArea")) {
-          document.getElementById("answerArea").style.display = "none";
-        }
-        clearInterval(answerTimerInterval); // stop admin countdown locally if present
+        // persist team answer into firebase
+        fbSetItem("teamAnswer_" + team, ans);
+        fbSetItem("submittedAnswer", ans);
+        document.getElementById("answerArea").style.display = "none";
+        clearInterval(answerTimerInterval); // stop countdown on Admin when someone submits
     }
 }
 
-/* ================= ANSWER TIMER (admin-side) ================= */
+// ================= ANSWER TIMER =================
 function startAnswerTimer(team) {
-    let sec = getState('settings')?.answerTime ?? answerTime;
+    let sec = answerTime;
 
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
@@ -452,8 +502,8 @@ function startAnswerTimer(team) {
 
     clearInterval(answerTimerInterval);
     answerTimerInterval = setInterval(() => {
-        // stop if that team already submitted in DB
-        const ans = (getState('teamAnswers') || {})[team] || "";
+        // stop if that team already submitted
+        let ans = fbGetItem("teamAnswer_" + team) || "";
         if (ans) {
             clearInterval(answerTimerInterval);
             answerTimerInterval = null;
@@ -477,20 +527,21 @@ function startAnswerTimer(team) {
     }, 1000);
 }
 
-/* ============== Steal / Wrong / Reveal flow ============== */
-async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
+// ============== Steal / Wrong / Reveal flow ==============
+function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
+    // show status beside "First to Buzz"
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
 
-    // add to outTeams in DB
+    // add to outTeams
     const outs = getOutTeams();
     if (!outs.includes(team)) outs.push(team);
-    await setOutTeamsDB(outs);
+    setOutTeams(outs);
 
     // clear that team's pending state
-    await dbSet(`teamAnswers/${team}`, "");
-    await dbSet('buzzed', "");
+    fbRemoveItem("buzzed");
+    fbRemoveItem("teamAnswer_" + team);
 
     // Decide: still allow steal or reveal
     if (outs.length >= 3) {
@@ -498,125 +549,114 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         revealCorrectAnswerAndLock();
     } else {
         // Enable steal for remaining teams
-        await dbSet('stealMode', team);
+        fbSetItem("stealMode", team);
         if (document.getElementById("stealNotice")) {
             document.getElementById("stealNotice").innerText =
                 "🚨 STEAL MODE: " + team + " is OUT! Other teams can buzz.";
         }
-        // keep buzzer closed until new team buzzes; teams can still buzz if stealMode allows (client code handles)
+        // Keep buzzer closed until a new team buzzes (handled by TEAM BUZZER watcher)
     }
 }
 
-async function revealCorrectAnswerAndLock() {
+function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
-    playSound("wrongSound"); // short cue
+    playSound("wrongSound"); // short cue before reveal (optional)
     alert("No team answered correctly. Correct answer is: " + correct);
 
+    // display on Admin panel
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
     }
 
-    // lock question tile visually
+    // lock question tile
     lockQuestion(currentLevel, currentQIndex);
 
-    // fully stop/clear turn in DB
-    await dbUpdate({
-      enableBuzzer: false,
-      buzzed: "",
-      stealMode: "",
-      currentQuestion: ""
-    });
-    await setOutTeamsDB([]);
+    // fully stop/clear turn
+    fbSetItem("enableBuzzer", "false");
+    fbRemoveItem("buzzed");
+    fbRemoveItem("stealMode");
+    setOutTeams([]);
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 }
 
-/* ================= AUTO-CHECK BUZZ =================
-   We'll use the realtime snapshot to act when buzzed/teamAnswers change
-*/
+// ================= AUTO-CHECK BUZZ =================
+// We'll emulate the original polling behavior but use fbGetItem instead of localStorage
+if (document.getElementById("firstBuzz")) {
+    setInterval(() => {
+        let buzzed = fbGetItem("buzzed");
 
-// On DB update (onValue above) we reflect to admin. To maintain the previous
-// behavior of periodic check and evaluation, wire a small check loop that
-// checks for a buzz + teamAnswers and evaluates correctness.
-setInterval(async () => {
-    const buzzed = getState('buzzed') || "";
-
-    if (buzzed) {
-        // show who buzzed
-        if (document.getElementById("firstBuzz")) {
+        if (buzzed) {
+            // show who buzzed
             document.getElementById("firstBuzz").innerText = buzzed;
-        }
-        // close buzzer while this team answers
-        await dbSet('enableBuzzer', false);
+            // close buzzer while this team answers
+            fbSetItem("enableBuzzer", "false");
 
-        // start answer timer for this buzzing team (if not already)
-        if (!answerTimerInterval) {
-            startAnswerTimer(buzzed);
-        }
-
-        // check if they already submitted an answer
-        const ans = (getState('teamAnswers') || {})[buzzed] || "";
-        if (ans) {
-            // reflect to Admin immediately
-            if (document.getElementById("submittedAnswer")) {
-                document.getElementById("submittedAnswer").innerText = "📝 " + ans;
+            // start 20s answer window for this buzzing team
+            if (!answerTimerInterval) {
+                startAnswerTimer(buzzed);
             }
-            clearInterval(answerTimerInterval);
-            answerTimerInterval = null;
 
-            // evaluate
-            let correctAns = (questions[currentLevel][currentQIndex].a || "").trim().toLowerCase();
-            if (ans.trim().toLowerCase() === correctAns) {
-                playSound("correctSound");
-                let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
+            // ensure we watch that team's answer key for changes
+            ensureTeamAnswerWatch(buzzed);
 
-                // update scores in DB
-                const newScores = Object.assign({}, getState('scores') || {Zack:0,Ryan:0,Kyle:0});
-                newScores[buzzed] = (newScores[buzzed] || 0) + points;
-                await dbSet('scores', newScores);
-
-                updateScores();
-                highlightScore(buzzed);
-                alert(buzzed + " is CORRECT! +" + points + " pts");
-
-                // Stop at correct
-                clearInterval(countdownInterval);
-                timeLeft = 0;
-                if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "0";
-                updateCircle(0, "lime", answerTime);
-
+            // check if they already submitted an answer
+            let ans = fbGetItem("teamAnswer_" + buzzed) || "";
+            if (ans) {
+                // reflect to Admin immediately
                 if (document.getElementById("submittedAnswer")) {
-                    document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
+                    document.getElementById("submittedAnswer").innerText = "📝 " + ans;
                 }
+                clearInterval(answerTimerInterval);
+                answerTimerInterval = null;
 
-                // lock the question and reset turn state
-                lockQuestion(currentLevel, currentQIndex);
-                await dbSet('buzzed', "");
-                await dbSet(`teamAnswers/${buzzed}`, "");
-                await dbSet('stealMode', "");
-                await setOutTeamsDB([]);
-            } else {
-                // wrong answer -> mark OUT, allow steal or reveal
-                playSound("wrongSound");
-                handleTeamWrongOrTimeout(buzzed, "WRONG");
+                // evaluate
+                let correctAns = questions[currentLevel][currentQIndex].a.trim().toLowerCase();
+                if (ans.trim().toLowerCase() === correctAns) {
+                    playSound("correctSound");
+                    let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
+                    scores[buzzed] += points;
+                    fbSetItem("scores", JSON.stringify(scores));
+                    updateScores();
+                    highlightScore(buzzed);
+                    alert(buzzed + " is CORRECT! +" + points + " pts");
+
+                    // ✅ Stop at tama ang sagot
+                    clearInterval(countdownInterval);
+                    timeLeft = 0;
+                    document.getElementById("circleTime").textContent = "0";
+                    updateCircle(0, "lime", answerTime);
+
+                    // show correct on Admin
+                    if (document.getElementById("submittedAnswer")) {
+                        document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
+                    }
+
+                    // lock the question and reset turn state
+                    lockQuestion(currentLevel, currentQIndex);
+                    fbRemoveItem("buzzed");
+                    fbRemoveItem("teamAnswer_" + buzzed);
+                    fbRemoveItem("stealMode");
+                    setOutTeams([]);
+                } else {
+                    // wrong answer -> mark OUT, allow steal or reveal
+                    playSound("wrongSound");
+                    handleTeamWrongOrTimeout(buzzed, "WRONG");
+                }
             }
         }
-    }
 
-    updateScores();
-}, 300);
+        updateScores();
+    }, 300);
+}
 
-/* ================= TEAM BUZZER (client) =================
-   The team button enabled/disabled logic now reads from state.enableBuzzer and
-   state.stealMode and state.outTeams.
-*/
-
+// ================= TEAM BUZZER =================
 if (document.getElementById("buzzerBtn")) {
     setInterval(() => {
-        const enable = getState('enableBuzzer') === true;
-        const stealFrom = getState('stealMode') || "";
-        const team = sessionStorage.getItem("team");
-        const alreadyBuzzed = getState('buzzed') || "";
+        let enable = fbGetItem("enableBuzzer") === "true";
+        let stealFrom = fbGetItem("stealMode");
+        let team = sessionStorage.getItem("team");
+        let alreadyBuzzed = fbGetItem("buzzed");
         const outs = getOutTeams();
 
         const canSteal = stealFrom && stealFrom !== team && !alreadyBuzzed && !outs.includes(team);
@@ -629,25 +669,22 @@ if (document.getElementById("buzzerBtn")) {
         }
     }, 200);
 
-    document.getElementById("buzzerBtn").onclick = async () => {
+    document.getElementById("buzzerBtn").onclick = () => {
         let team = sessionStorage.getItem("team");
         if (team) {
-            // write to shared DB so admin + other clients know
-            await dbSet('buzzed', team);
-            if (document.getElementById("buzzerBtn")) document.getElementById("buzzerBtn").disabled = true;
-            if (document.getElementById("answerArea")) document.getElementById("answerArea").style.display = "block";
+            fbSetItem("buzzed", team);
+            document.getElementById("buzzerBtn").disabled = true;
+            document.getElementById("answerArea").style.display = "block";
             playSound("buzzSound");
         }
     }
 }
 
-/* ================= QUESTION BOARD ================= */
-
+// ================= QUESTION BOARD =================
 function showBoard(level, btn) {
     currentLevel = level;
     renderBoard(level);
-    // disable buzzer while browsing board
-    dbSet('enableBuzzer', false);
+    fbSetItem("enableBuzzer", "false");
 
     // button highlight
     document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("selected"));
@@ -658,7 +695,6 @@ function showBoard(level, btn) {
 
 function renderBoard(level) {
     let container = document.getElementById("questionBox");
-    if (!container) return;
     container.innerHTML = "";
     container.classList.add("board");
 
@@ -685,8 +721,8 @@ function revealQuestion(index, question, element, level) {
 
     element.classList.add("revealed");
 
-    // persist current question to DB
-    dbSet('currentQuestion', question.q);
+    // persist currentQuestion to firebase-backed storage
+    fbSetItem("currentQuestion", question.q);
     currentQIndex = index;
     resetTurnState(); // reset per-question state when opening a fresh tile
 }
@@ -694,7 +730,6 @@ function revealQuestion(index, question, element, level) {
 // Lock box after answered
 function lockQuestion(level, index) {
     let container = document.getElementById("questionBox");
-    if (!container) return;
     let items = container.querySelectorAll(".board-item");
     if (items[index]) {
         items[index].classList.add("revealed");
@@ -702,45 +737,59 @@ function lockQuestion(level, index) {
     }
 }
 
-/* ================= EXTRA FUNCTIONS FOR SINGLE STEAL ================= */
-let stealUsed = false; // track per question
+// ================= EXTRA FUNCTIONS FOR SINGLE STEAL =================
+let stealUsed = false; // ✅ track kung nagamit na ang steal
 
-async function startStealMode(outTeam) {
+// ✅ Start Steal Mode countdown (10s buzz again)
+function startStealMode(outTeam) {
     if (stealUsed) {
         revealCorrectAnswerAndLock();
         return;
     }
-    stealUsed = true;
+    stealUsed = true; // mark steal as already used
 
     clearInterval(countdownInterval);
     mode = "buzz";
-    timeLeft = getState('settings')?.buzzTime ?? buzzTime;
+    timeLeft = buzzTime;
 
     // disable out team
     const outs = getOutTeams();
     if (!outs.includes(outTeam)) outs.push(outTeam);
-    await setOutTeamsDB(outs);
+    setOutTeams(outs);
 
-    // reset buzz state but keep outs
-    await dbSet('buzzed', "");
-    await dbSet('enableBuzzer', true);
+    // reset buzz state but keep OUTS
+    fbRemoveItem("buzzed");
+    fbSetItem("enableBuzzer", "true");
 
-    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-    updateCircle(timeLeft, "lime", timeLeft);
+    document.getElementById("circleTime").textContent = timeLeft;
+    updateCircle(buzzTime, "lime", buzzTime);
 
     if (document.getElementById("stealNotice")) {
         document.getElementById("stealNotice").innerText = "🚨 STEAL MODE BEGIN! Other teams may buzz.";
     }
 
-    playSound("stealBeginSound");
+    playSound("stealBeginSound"); // optional sound
+
+    // re-subscribe to firebase buzzed updates for new buzzes
+    if (buzzedUnsub) {
+        try { buzzedUnsub(); } catch (e) {}
+        buzzedUnsub = null;
+    }
+    buzzedUnsub = onValue(nodeRef("buzzed"), (snap) => {
+        const val = snap.exists() ? snap.val() : null;
+        if (val) {
+            stopOnBuzz({ key: "buzzed", newValue: val });
+        }
+    });
 
     countdownInterval = setInterval(runTimer, 1000);
 }
 
-// override handleTeamWrongOrTimeout to allow single steal
+// ✅ Override handleTeamWrongOrTimeout para limit 1 steal
 const originalHandleWrong = handleTeamWrongOrTimeout;
-handleTeamWrongOrTimeout = async function(team, reasonLabel = "WRONG") {
-    await originalHandleWrong(team, reasonLabel);
+handleTeamWrongOrTimeout = function(team, reasonLabel = "WRONG") {
+    // call original to mark OUT
+    originalHandleWrong(team, reasonLabel);
 
     const outs = getOutTeams();
     if (outs.length >= 3) {
@@ -751,65 +800,9 @@ handleTeamWrongOrTimeout = async function(team, reasonLabel = "WRONG") {
     }
 };
 
-// Reset steal flag per new round/question
+// ✅ Reset steal flag per new round/question
 const originalResetTurnState = resetTurnState;
-resetTurnState = async function() {
+resetTurnState = function() {
     stealUsed = false;
-    await originalResetTurnState();
+    originalResetTurnState();
 };
-
-/* ================= Utility: circle progress update (unchanged) ================= */
-function updateCircle(time, color, max) {
-    const circle = document.getElementById("circleProgress");
-    if (!circle) return;
-    const radius = 54;
-    const circumference = 2 * Math.PI * radius;
-    const progress = Math.max(time, 0) / max;
-
-    circle.style.strokeDasharray = circumference;
-    circle.style.strokeDashoffset = circumference - progress * circumference;
-    circle.style.stroke = color;
-}
-
-/* ================= Initialization ================= */
-
-// ensure DB has basic keys and populate local snapshot, then update UI
-(async function init() {
-  // adopt settings defaults into local buzzTime/answerTime if DB has them
-  await ensureInitialState();
-
-  // if DB has settings, use them
-  const s = getState('settings');
-  if (s) {
-    buzzTime = s.buzzTime ?? buzzTime;
-    answerTime = s.answerTime ?? answerTime;
-  }
-
-  // initial UI updates
-  updateScores();
-  reflectOutTeamsUI();
-
-  // if an admin page, you might want to render the default board
-  if (document.getElementById("questionBox")) {
-    renderBoard(currentLevel);
-  }
-
-  // optional: hook up startRound button if present
-  const startBtn = document.getElementById('startRoundBtn');
-  if (startBtn) startBtn.onclick = startRound;
-})();
-
-
-
-/* Expose some functions to global window so inline HTML buttons can call them */
-window.startRound = startRound;
-window.resetGame = resetGame;
-window.selectTeam = selectTeam;
-window.submitAnswer = submitAnswer;
-window.openSettingsModal = openSettingsModal;
-window.closeSettingsModal = closeSettingsModal;
-window.saveSettings = saveSettings;
-window.showBoard = showBoard;
-window.teamBuzz = teamBuzz;
-
-
