@@ -802,4 +802,3 @@ setInterval(async() => {
 
     console.log("Firebase quiz module initialized.");
 })();
-
