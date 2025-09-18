@@ -1,5 +1,3 @@
-<!-- Put this in your HTML (example: just before </body>) -->
-<script type="module">
 /* ================== Firebase + App Init ================== */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getDatabase, ref, set, update, onValue, push, remove, get } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
@@ -31,22 +29,22 @@ let dbState = {
         currentQuestion: ""
     },
     scores: { Zack: 0, Ryan: 0, Kyle: 0 },
-    answers: {} , // answers/<team> => string
+    answers: {}, // answers/<team> => string
     outTeams: [], // stored under /outTeams as object or array
 };
 
 /* ================== Database refs ================== */
 const rootRef = ref(db, '/');
-const stateRef = ref(db, '/state');            // enableBuzzer, buzzed, stealMode, currentQuestion, answeringTeam
-const scoresRef = ref(db, '/scores');          // {Zack:0,...}
-const answersRef = ref(db, '/answers');        // team answer values
-const outTeamsRef = ref(db, '/outTeams');      // array/object of out teams
-const metaRef = ref(db, '/meta');              // optional meta values like currentLevel, currentQIndex
+const stateRef = ref(db, '/state'); // enableBuzzer, buzzed, stealMode, currentQuestion, answeringTeam
+const scoresRef = ref(db, '/scores'); // {Zack:0,...}
+const answersRef = ref(db, '/answers'); // team answer values
+const outTeamsRef = ref(db, '/outTeams'); // array/object of out teams
+const metaRef = ref(db, '/meta'); // optional meta values like currentLevel, currentQIndex
 
 /* ================== Listen for realtime updates ================== */
 onValue(stateRef, (snap) => {
     const val = snap.val() || {};
-    dbState.state = { ...dbState.state, ...val };
+    dbState.state = {...dbState.state, ...val };
     // update UI dependent on buzzed / firstBuzz etc
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").textContent = dbState.state.buzzed || "None yet";
@@ -56,7 +54,7 @@ onValue(stateRef, (snap) => {
 });
 
 onValue(scoresRef, (snap) => {
-    dbState.scores = snap.val() || { Zack:0, Ryan:0, Kyle:0 };
+    dbState.scores = snap.val() || { Zack: 0, Ryan: 0, Kyle: 0 };
     updateScores();
 });
 
@@ -90,7 +88,8 @@ onValue(metaRef, (snap) => {
 /* ================== DB helper wrappers ================== */
 async function dbSetState(key, value) {
     // write single key under state
-    await update(stateRef, { [key]: value });
+    await update(stateRef, {
+        [key]: value });
 }
 
 async function dbSetScores(obj) {
@@ -98,12 +97,14 @@ async function dbSetScores(obj) {
 }
 
 async function dbSetAnswer(team, ans) {
-    await update(answersRef, { [team]: ans });
+    await update(answersRef, {
+        [team]: ans });
 }
 
 async function dbRemoveAnswer(team) {
     // remove by setting null
-    await update(answersRef, { [team]: null });
+    await update(answersRef, {
+        [team]: null });
 }
 
 async function dbSetOutTeams(arr) {
@@ -335,7 +336,7 @@ async function teamBuzz() {
     const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
 
     if (canNormal || canSteal) {
-        await dbSetState('buzzed', team);      // global notification
+        await dbSetState('buzzed', team); // global notification
         await dbSetState('enableBuzzer', false); // close buzzer
         document.getElementById("buzzerBtn").disabled = true;
         if (document.getElementById("answerArea")) document.getElementById("answerArea").style.display = "block";
@@ -366,7 +367,7 @@ function startAnswerTimer(team) {
         document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
     }
     clearInterval(answerTimerInterval);
-    answerTimerInterval = setInterval(async () => {
+    answerTimerInterval = setInterval(async() => {
         // stop if that team already submitted (check DB cache)
         let ans = (dbState.answers && dbState.answers[team]) || "";
         if (ans) {
@@ -440,7 +441,7 @@ function revealCorrectAnswerAndLock() {
    We run a periodic loop similar to your original setInterval(300) that checks
    the `dbState` for buzzed value and answers, then evaluates correctness.
 */
-setInterval(async () => {
+setInterval(async() => {
     const buzzed = dbState.state.buzzed || "";
     if (buzzed) {
         // show who buzzed
@@ -472,7 +473,7 @@ setInterval(async () => {
                 let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
 
                 // update scores in DB
-                const newScores = { ...(dbState.scores || { Zack:0, Ryan:0, Kyle:0 }) };
+                const newScores = {...(dbState.scores || { Zack: 0, Ryan: 0, Kyle: 0 }) };
                 newScores[buzzed] = (newScores[buzzed] || 0) + points;
                 dbState.scores = newScores;
                 await dbSetScores(newScores);
@@ -682,22 +683,13 @@ function saveSettings() {
     closeSettingsModal();
 }
 
-
-/* ================= Expose functions globally ================= */
-// Admin functions
+/* Expose some functions to global window so inline HTML buttons can call them */
 window.startRound = startRound;
 window.resetGame = resetGame;
-window.showBoard = showBoard;
+window.selectTeam = selectTeam;
+window.submitAnswer = submitAnswer;
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
-
-// Team functions
-window.selectTeam = selectTeam;
+window.showBoard = showBoard;
 window.teamBuzz = teamBuzz;
-window.submitAnswer = submitAnswer;
-
-</script>
-
-
-
