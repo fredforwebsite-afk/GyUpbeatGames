@@ -813,3 +813,4 @@ window.resetGame = resetGame;
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
+
