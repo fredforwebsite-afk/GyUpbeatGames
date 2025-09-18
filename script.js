@@ -314,24 +314,6 @@ function highlightScore(team) {
     }
 }
 
-
-function renderBoard(level) {
-    let container = document.getElementById("questionBox");
-    container.innerHTML = "";
-    container.classList.add("board");
-
-    questions[level].forEach((q, idx) => {
-        let item = document.createElement("div");
-        item.className = "board-item";
-        item.dataset.index = idx;
-        item.innerText = (idx + 1);
-
-        item.onclick = () => revealQuestion(idx, q, item, level);
-
-        container.appendChild(item);
-    });
-}
-
 /* ========== Team functions (client-side) ========== */
 function selectTeam(team) {
     sessionStorage.setItem("team", team);
@@ -711,4 +693,5 @@ window.saveSettings = saveSettings;
 window.showBoard = showBoard;
 window.teamBuzz = teamBuzz;
 </script>
+
 
