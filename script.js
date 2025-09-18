@@ -800,6 +800,71 @@ function updateCircle(time, color, max) {
 })();
 
 
+
+    let teamName = null;
+    let answerInterval;
+    let answerTimer = 20;
+
+    function selectTeam(name) {
+      teamName = name;
+      document.getElementById("teamSelect").style.display = "none";
+      document.getElementById("buzzerArea").style.display = "block";
+      document.getElementById("teamName").innerText = "You are Team " + teamName;
+    }
+    window.selectTeam = selectTeam;
+
+    // Listen for game state
+    onValue(ref(db, "game/state"), snap => {
+      let state = snap.val();
+      if (!state || !teamName) return;
+
+      let canBuzz = state.enableBuzzer && !state.buzzed;
+      document.getElementById("buzzerBtn").disabled = !canBuzz;
+
+      if (state.buzzed === teamName && state.mode === "answer") {
+        document.getElementById("answerArea").style.display = "block";
+        startAnswerTimer(state.timeLeft || 20);
+      }
+    });
+
+    // Buzz button
+    document.getElementById("buzzerBtn").onclick = () => {
+      if (!teamName) return;
+      update(ref(db, "game/state"), {
+        buzzed: teamName,
+        answeringTeam: teamName,
+        mode: "answer"
+      });
+      document.getElementById("buzzSound").play();
+    };
+
+    function startAnswerTimer(startTime) {
+      clearInterval(answerInterval);
+      answerTimer = startTime;
+      document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+      answerInterval = setInterval(() => {
+        answerTimer--;
+        document.getElementById("answerTimer").innerText = "Answer Time: " + answerTimer;
+        if (answerTimer <= 0) {
+          clearInterval(answerInterval);
+          document.getElementById("answerTimer").innerText = "⏳ Time's up!";
+          document.getElementById("answerArea").style.display = "none";
+        }
+      }, 1000);
+    }
+
+    function submitAnswer() {
+      let ans = document.getElementById("teamAnswer").value;
+      if (ans.trim() === "") return;
+      update(ref(db, "game/state"), {
+        submittedAnswer: teamName + ": " + ans
+      });
+      document.getElementById("answerArea").style.display = "none";
+      clearInterval(answerInterval);
+    }
+    window.submitAnswer = submitAnswer;
+
+
 /* Expose some functions to global window so inline HTML buttons can call them */
 window.startRound = startRound;
 window.resetGame = resetGame;
@@ -810,3 +875,4 @@ window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
 window.showBoard = showBoard;
 window.teamBuzz = teamBuzz;
+
