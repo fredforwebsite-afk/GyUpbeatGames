@@ -402,3 +402,5 @@ window.resetGame = resetGame;
 window.showBoard = showBoard;
 window.revealQuestion = revealQuestion;
 window.lockQuestion = lockQuestion;
+
+
