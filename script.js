@@ -2,14 +2,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebas
 import { getDatabase, ref, set, get, remove, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
-  authDomain: "gygames-fafcb.firebaseapp.com",
-  databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
-  projectId: "gygames-fafcb",
-  storageBucket: "gygames-fafcb.firebasestorage.app",
-  messagingSenderId: "603231637988",
-  appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
-  measurementId: "G-058J8NLC43"
+    apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
+    authDomain: "gygames-fafcb.firebaseapp.com",
+    databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
+    projectId: "gygames-fafcb",
+    storageBucket: "gygames-fafcb.firebasestorage.app",
+    messagingSenderId: "603231637988",
+    appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+    measurementId: "G-058J8NLC43"
 };
 
 // Init
@@ -45,7 +45,17 @@ function fbOnChange(key, callback) {
 
 
 // ================= VARIABLES =================
-let scores = await fbGet("scores") || { Zack: 0, Ryan: 0, Kyle: 0 };
+let scores = { Zack: 0, Ryan: 0, Kyle: 0 };
+
+async function initGame() {
+    let savedScores = await fbGet("scores");
+    if (savedScores) scores = savedScores;
+    updateScores();
+}
+
+// tawagin agad
+initGame();
+
 let currentLevel = "easy";
 let currentQIndex = 0;
 let timerInterval;
@@ -220,7 +230,7 @@ function stopOnBuzz(e) {
     if (e.key === "buzzed" && e.newValue) {
         const team = e.newValue;
         document.getElementById("firstBuzz").textContent = team;
-        localStorage.setItem("answeringTeam", team);
+        fbSet("answeringTeam", team);
         fbSet("enableBuzzer", false);
         switchToAnswer(team);
     }
@@ -320,8 +330,8 @@ function startAnswerTimer(team) {
     }
 
     clearInterval(answerTimerInterval);
-    answerTimerInterval = setInterval(() => {
-        let ans = localStorage.getItem("teamAnswer_" + team) || "";
+    answerTimerInterval = setInterval(async() => { // <-- ginawa kong async
+        let ans = await fbGet("teamAnswer_" + team) || ""; // <-- Firebase na
         if (ans) {
             clearInterval(answerTimerInterval);
             answerTimerInterval = null;
@@ -353,8 +363,8 @@ function startAnswerTimer(team) {
             handleTeamWrongOrTimeout(team, "TIME UP");
         }
     }, 1000);
-
 }
+
 
 
 
@@ -372,7 +382,7 @@ function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
 
     // clear that team's pending state
     fbRemove("buzzed");
-    localStorage.removeItem("teamAnswer_" + team);
+    fbRemove("teamAnswer_" + team);
 
     // Decide: still allow steal or reveal
     if (outs.length >= 3) {
@@ -380,7 +390,7 @@ function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         revealCorrectAnswerAndLock();
     } else {
         // Enable steal for remaining teams
-        localStorage.setItem("stealMode", team);
+        fbSet("stealMode", team);
         if (document.getElementById("stealNotice")) {
             document.getElementById("stealNotice").innerText =
                 "🚨 STEAL MODE: " + team + " is OUT! Other teams can buzz.";
@@ -602,4 +612,3 @@ resetTurnState = function() {
     stealUsed = false;
     originalResetTurnState();
 };
-
