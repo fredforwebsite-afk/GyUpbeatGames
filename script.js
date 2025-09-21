@@ -619,3 +619,12 @@ window.resetGame = resetGame;
 window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 window.saveSettings = saveSettings;
+
+// 🔗 Bind buttons by ID (in case wala kang onclick sa HTML)
+document.getElementById("startBtn")?.addEventListener("click", startRound);
+document.getElementById("resetBtn")?.addEventListener("click", resetGame);
+document.getElementById("settingsIcon")?.addEventListener("click", openSettingsModal);
+document.getElementById("saveSettingsBtn")?.addEventListener("click", saveSettings);
+document.getElementById("closeSettingsBtn")?.addEventListener("click", closeSettingsModal);
+
+
