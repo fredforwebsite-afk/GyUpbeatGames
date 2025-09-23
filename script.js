@@ -1,537 +1,171 @@
-// ================= VARIABLES =================
-let scores = JSON.parse(localStorage.getItem("scores")) || { Zack: 0, Ryan: 0, Kyle: 0 };
-let currentLevel = "easy";
-let currentQIndex = 0;
-let timerInterval;
-let answerTimerInterval;
+<!DOCTYPE html>
 
-let buzzTime = 10; // ✅ default 10s
-let answerTime = 20; // ✅ default 20s
+<html lang="en">
 
-// ================= SETTINGS =================
-function openSettingsModal() {
-    document.getElementById("settingsModal").style.display = "flex";
-    document.getElementById("buzzTimeInput").value = buzzTime;
-    document.getElementById("answerTimeInput").value = answerTime;
-}
-
-function closeSettingsModal() {
-    document.getElementById("settingsModal").style.display = "none";
-}
-
-function saveSettings() {
-    buzzTime = parseInt(document.getElementById("buzzTimeInput").value) || 10;
-    answerTime = parseInt(document.getElementById("answerTimeInput").value) || 20;
-
-    alert("Settings saved! Buzz Time: " + buzzTime + "s, Answer Time: " + answerTime + "s");
-
-    // ✅ Update circle immediately if a round is running
-    if (mode === "buzz") {
-        timeLeft = buzzTime;
-        updateCircle(buzzTime, "lime", buzzTime);
-        document.getElementById("circleTime").textContent = timeLeft;
-    } else if (mode === "answer") {
-        timeLeft = answerTime;
-        updateCircle(answerTime, "yellow", answerTime);
-        document.getElementById("circleTime").textContent = timeLeft;
-    }
-
-    closeSettingsModal();
-}
-
-// ================= QUESTIONS =================
-const questions = {
-    easy: [
-        { q: "Who was the first President of the United States?", a: "George Washington" },
-        { q: "Who is known as the Father of the Philippine Revolution?", a: "Andres Bonifacio" },
-        { q: "In what year did the Philippines gain independence from Spain?", a: "1898" },
-        { q: "Who wrote the Declaration of Independence?", a: "Thomas Jefferson" },
-        { q: "What event started the American Revolution?", a: "Battles of Lexington and Concord" },
-        { q: "Who is the national hero of the Philippines?", a: "Jose Rizal" },
-        { q: "What was the first capital of the United States?", a: "Philadelphia" },
-        { q: "Who led the Katipunan during the Philippine Revolution?", a: "Andres Bonifacio" }
-    ],
-    medium: [
-        { q: "Guess the country flag:", a: "japan", img: "https://upload.wikimedia.org/wikipedia/en/9/9e/Flag_of_Japan.svg" },
-        { q: "Guess the country flag:", a: "france", img: "https://upload.wikimedia.org/wikipedia/en/c/c3/Flag_of_France.svg" },
-        { q: "Guess the country flag:", a: "germany", img: "https://upload.wikimedia.org/wikipedia/en/b/ba/Flag_of_Germany.svg" },
-        { q: "Guess the country flag:", a: "italy", img: "https://upload.wikimedia.org/wikipedia/en/0/03/Flag_of_Italy.svg" },
-        { q: "Guess the country flag:", a: "brazil", img: "https://upload.wikimedia.org/wikipedia/en/0/05/Flag_of_Brazil.svg" },
-        { q: "Guess the country flag:", a: "canada", img: "https://upload.wikimedia.org/wikipedia/commons/c/cf/Flag_of_Canada.svg" },
-        { q: "Guess the country flag:", a: "india", img: "https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" },
-        { q: "Guess the country flag:", a: "south korea", img: "https://upload.wikimedia.org/wikipedia/commons/0/09/Flag_of_South_Korea.svg" }
-    ],
-    hard: [
-        { q: "What particle carries a negative electric charge?", a: "Electron" },
-        { q: "What is the most abundant gas in Earth's atmosphere?", a: "Nitrogen" },
-        { q: "What force keeps planets in orbit around the Sun?", a: "Gravity" },
-        { q: "Which part of the atom has no electric charge?", a: "Neutron" },
-        { q: "Which blood type is known as the universal donor?", a: "O negative" },
-        { q: "Which organ in the human body produces insulin?", a: "Pancreas" },
-        { q: "What is the largest planet in our solar system?", a: "Jupiter" },
-        { q: "Who proposed the three laws of motion?", a: "Isaac Newton" }
-    ]
-};
-
-// ----------------- helpers for per-question state -----------------
-function getOutTeams() {
-    try { return JSON.parse(localStorage.getItem("outTeams")) || []; } catch { return []; }
-}
-
-function setOutTeams(arr) {
-    localStorage.setItem("outTeams", JSON.stringify(arr));
-}
-
-function resetTurnState() {
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = null;
-    localStorage.removeItem("buzzed");
-    localStorage.removeItem("stealMode");
-    localStorage.removeItem("submittedAnswer");
-    setOutTeams([]);
-    if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "⏳";
-    }
-    if (document.getElementById("firstBuzz")) {
-        document.getElementById("firstBuzz").innerText = "None yet";
-    }
-    if (document.getElementById("stealNotice")) {
-        document.getElementById("stealNotice").innerText = "";
-    }
-}
-
-// ================= ADMIN FUNCTIONS =================
-let countdownInterval;
-let timeLeft = buzzTime;
-let mode = "buzz"; // "buzz" or "answer"
-
-function startRound() {
-    clearInterval(countdownInterval);
-    timeLeft = buzzTime;
-    mode = "buzz";
-
-    resetTurnState();
-    localStorage.setItem("enableBuzzer", "true");
-    localStorage.setItem("buzzed", "");
-    localStorage.setItem("answeringTeam", "");
-
-    updateCircle(buzzTime, "lime", buzzTime);
-    document.getElementById("circleTime").textContent = timeLeft;
-    document.getElementById("firstBuzz").textContent = "None yet";
-    document.getElementById("stealNotice").textContent = ""; // clear message
-
-    window.addEventListener("storage", stopOnBuzz);
-
-    countdownInterval = setInterval(runTimer, 1000);
-}
-
-function runTimer() {
-    timeLeft--;
-    document.getElementById("circleTime").textContent = timeLeft;
-
-    if (mode === "buzz") {
-        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
-
-        if (timeLeft > 5) playSound("beepSound");
-        else if (timeLeft > 0) playSound("beepHighSound");
-
-        if (timeLeft <= 0) {
-            // nobody buzzed
-            clearInterval(countdownInterval);
-            localStorage.setItem("enableBuzzer", "false");
-            window.removeEventListener("storage", stopOnBuzz);
-
-            document.getElementById("circleTime").textContent = "⏳ No Buzz";
-            playSound("timesUpSound");
-
-            // ✅ show admin option to retry
-            document.getElementById("stealNotice").innerHTML =
-                `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Settings icon */
+        
+        #settingsIcon {
+            position: fixed;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            cursor: pointer;
+            z-index: 1000;
         }
-    } else if (mode === "answer") {
-        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
-
-        if (timeLeft > 5) playSound("beepSound");
-        else if (timeLeft > 0) playSound("beepHighSound");
-
-        if (timeLeft <= 0) {
-            clearInterval(countdownInterval);
-            document.getElementById("circleTime").textContent = "⏳ Time's up!";
-            playSound("timesUpSound");
+        /* Modal styles */
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
         }
-    }
-}
-
-// 🛑 If a team buzzes early
-function stopOnBuzz(e) {
-    if (e.key === "buzzed" && e.newValue) {
-        const team = e.newValue;
-        document.getElementById("firstBuzz").textContent = team;
-        localStorage.setItem("answeringTeam", team);
-        localStorage.setItem("enableBuzzer", "false");
-        switchToAnswer(team);
-    }
-}
-
-
-// 🔄 Switch from buzz mode to answer mode
-function switchToAnswer(team) {
-    clearInterval(countdownInterval);
-    mode = "answer";
-    timeLeft = answerTime;
-
-    updateCircle(answerTime, "yellow", answerTime);
-    document.getElementById("circleTime").textContent = timeLeft;
-
-    countdownInterval = setInterval(runTimer, 1000);
-    window.removeEventListener("storage", stopOnBuzz);
-}
-
-// 🎨 Update circle progress
-function updateCircle(time, color, max) {
-    const circle = document.getElementById("circleProgress");
-    const radius = 54;
-    const circumference = 2 * Math.PI * radius;
-    const progress = Math.max(time, 0) / max;
-
-    circle.style.strokeDasharray = circumference;
-    circle.style.strokeDashoffset = circumference - progress * circumference;
-    circle.style.stroke = color;
-}
-
-// 🔊 Sound helper
-function playSound(id) {
-    const el = document.getElementById(id);
-    if (el) {
-        el.currentTime = 0;
-        el.play().catch(() => {});
-    }
-}
-
-function resetGame() {
-    scores = { Zack: 0, Ryan: 0, Kyle: 0 };
-    localStorage.setItem("scores", JSON.stringify(scores));
-    updateScores();
-    localStorage.clear();
-    location.reload();
-}
-
-function updateScores() {
-    if (document.getElementById("scoreZack")) {
-        document.getElementById("scoreZack").innerText = scores.Zack;
-        document.getElementById("scoreRyan").innerText = scores.Ryan;
-        document.getElementById("scoreKyle").innerText = scores.Kyle;
-    }
-}
-
-function highlightScore(team) {
-    let td = document.getElementById("score" + team);
-    if (td) {
-        td.classList.add("highlight");
-        setTimeout(() => td.classList.remove("highlight"), 1000);
-    }
-}
-
-// ================= TEAM FUNCTIONS =================
-function selectTeam(team) {
-    sessionStorage.setItem("team", team);
-    document.getElementById("teamSelect").style.display = "none";
-    document.getElementById("buzzerArea").style.display = "block";
-    document.getElementById("teamName").innerText = "You are " + team;
-}
-
-function submitAnswer() {
-    let team = sessionStorage.getItem("team");
-    let ans = document.getElementById("teamAnswer").value;
-    if (team && ans) {
-        localStorage.setItem("teamAnswer_" + team, ans);
-        localStorage.setItem("submittedAnswer", ans);
-        document.getElementById("answerArea").style.display = "none";
-        clearInterval(answerTimerInterval); // stop countdown on Admin when someone submits
-    }
-}
-
-// ================= ANSWER TIMER =================
-function startAnswerTimer(team) {
-    answerTime = 20;
-
-    // Update both Admin (submittedAnswer) and Team (answerTime)
-    if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "⏳ " + answerTime + "s left...";
-    }
-    if (document.getElementById("answerTime")) {
-        document.getElementById("answerTime").innerText = "Answer Time: " + answerTime + "s";
-    }
-
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = setInterval(() => {
-        let ans = localStorage.getItem("teamAnswer_" + team) || "";
-        if (ans) {
-            clearInterval(answerTimerInterval);
-            answerTimerInterval = null;
-            return;
+        
+        .modal-content {
+            background: #222;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+            color: white;
+            text-align: center;
         }
-
-        answerTime--;
-
-        if (answerTime >= 0) {
-            if (document.getElementById("submittedAnswer")) {
-                document.getElementById("submittedAnswer").innerText = "⏳ " + answerTime + "s left...";
-            }
-            if (document.getElementById("answerTime")) {
-                document.getElementById("answerTime").innerText = "Answer Time: " + answerTime + "s";
-            }
+        
+        .modal-content h2 {
+            margin-bottom: 15px;
         }
-
-        if (answerTime < 0) {
-            clearInterval(answerTimerInterval);
-            answerTimerInterval = null;
-
-            if (document.getElementById("submittedAnswer")) {
-                document.getElementById("submittedAnswer").innerText = "❌ No answer submitted";
-            }
-            if (document.getElementById("answerTime")) {
-                document.getElementById("answerTime").innerText = "❌ Time’s up!";
-            }
-
-            handleTeamWrongOrTimeout(team, "TIME UP");
+        
+        .modal-content input {
+            width: 80%;
+            padding: 8px;
+            margin: 8px 0;
+            border-radius: 5px;
+            border: none;
+            text-align: center;
         }
-    }, 1000);
-
-}
-
-
-
-// ============== Steal / Wrong / Reveal flow ==============
-function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
-    // show status beside "First to Buzz"
-    if (document.getElementById("firstBuzz")) {
-        document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
-    }
-
-    // add to outTeams
-    const outs = getOutTeams();
-    if (!outs.includes(team)) outs.push(team);
-    setOutTeams(outs);
-
-    // clear that team's pending state
-    localStorage.removeItem("buzzed");
-    localStorage.removeItem("teamAnswer_" + team);
-
-    // Decide: still allow steal or reveal
-    if (outs.length >= 3) {
-        // All three teams are out -> reveal correct answer
-        revealCorrectAnswerAndLock();
-    } else {
-        // Enable steal for remaining teams
-        localStorage.setItem("stealMode", team);
-        if (document.getElementById("stealNotice")) {
-            document.getElementById("stealNotice").innerText =
-                "🚨 STEAL MODE: " + team + " is OUT! Other teams can buzz.";
+        
+        .modal-content button {
+            padding: 8px 14px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
         }
-        // Keep buzzer closed until a new team buzzes (handled by TEAM BUZZER watcher)
-    }
-}
-
-function revealCorrectAnswerAndLock() {
-    const correct = questions[currentLevel][currentQIndex].a;
-    playSound("wrongSound"); // short cue before reveal (optional)
-    alert("No team answered correctly. Correct answer is: " + correct);
-
-    // display on Admin panel
-    if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
-    }
-
-    // lock question tile
-    lockQuestion(currentLevel, currentQIndex);
-
-    // fully stop/clear turn
-    localStorage.setItem("enableBuzzer", "false");
-    localStorage.removeItem("buzzed");
-    localStorage.removeItem("stealMode");
-    setOutTeams([]);
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = null;
-}
-
-// ================= AUTO-CHECK BUZZ =================
-if (document.getElementById("firstBuzz")) {
-    setInterval(() => {
-        let buzzed = localStorage.getItem("buzzed");
-
-        if (buzzed) {
-            // show who buzzed
-            document.getElementById("firstBuzz").innerText = buzzed;
-            // close buzzer while this team answers
-            localStorage.setItem("enableBuzzer", "false");
-
-            // start 20s answer window for this buzzing team
-            if (!answerTimerInterval) {
-                startAnswerTimer(buzzed);
-            }
-
-            // check if they already submitted an answer
-            let ans = localStorage.getItem("teamAnswer_" + buzzed) || "";
-            if (ans) {
-                // reflect to Admin immediately
-                if (document.getElementById("submittedAnswer")) {
-                    document.getElementById("submittedAnswer").innerText = "📝 " + ans;
-                }
-                clearInterval(answerTimerInterval);
-                answerTimerInterval = null;
-
-                // evaluate
-                let correctAns = questions[currentLevel][currentQIndex].a.trim().toLowerCase();
-                if (ans.trim().toLowerCase() === correctAns) {
-                    playSound("correctSound");
-                    let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
-                    scores[buzzed] += points;
-                    localStorage.setItem("scores", JSON.stringify(scores));
-                    updateScores();
-                    highlightScore(buzzed);
-                    alert(buzzed + " is CORRECT! +" + points + " pts");
-
-                    // ✅ Stop at tama ang sagot
-                    clearInterval(countdownInterval);
-                    timeLeft = 0;
-                    document.getElementById("circleTime").textContent = "0";
-                    updateCircle(0, "lime", answerTime);
-
-                    // show correct on Admin
-                    if (document.getElementById("submittedAnswer")) {
-                        document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
-                    }
-
-                    // lock the question and reset turn state
-                    lockQuestion(currentLevel, currentQIndex);
-                    localStorage.removeItem("buzzed");
-                    localStorage.removeItem("teamAnswer_" + buzzed);
-                    localStorage.removeItem("stealMode");
-                    setOutTeams([]);
-                } else {
-                    // wrong answer -> mark OUT, allow steal or reveal
-                    playSound("wrongSound");
-                    handleTeamWrongOrTimeout(buzzed, "WRONG");
-                }
-            }
+        
+        .btn-save {
+            background: green;
+            color: white;
         }
-
-        updateScores();
-    }, 300);
-}
-
-// ================= TEAM BUZZER =================
-if (document.getElementById("buzzerBtn")) {
-    setInterval(() => {
-        let enable = localStorage.getItem("enableBuzzer") === "true";
-        let stealFrom = localStorage.getItem("stealMode");
-        let team = sessionStorage.getItem("team");
-        let alreadyBuzzed = localStorage.getItem("buzzed");
-        const outs = getOutTeams();
-
-        const canSteal = stealFrom && stealFrom !== team && !alreadyBuzzed && !outs.includes(team);
-        const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
-
-        if (canNormal || canSteal) {
-            document.getElementById("buzzerBtn").disabled = false;
-        } else {
-            document.getElementById("buzzerBtn").disabled = true;
+        
+        .btn-close {
+            background: red;
+            color: white;
+            margin-left: 5px;
         }
-    }, 200);
+    </style>
+</head>
 
-    document.getElementById("buzzerBtn").onclick = () => {
-        let team = sessionStorage.getItem("team");
-        if (team) {
-            localStorage.setItem("buzzed", team);
-            document.getElementById("buzzerBtn").disabled = true;
-            document.getElementById("answerArea").style.display = "block";
-            playSound("buzzSound");
+<body>
+    <!-- Settings Icon -->
+    <div id="settingsIcon" onclick="openSettingsModal()">⚙️</div>
 
-            // ✅ Start the answer timer for THIS team only
-            startAnswerTimer(team);
-        }
-    };
+    <div class="container">
+        <h1>Admin Panel</h1>
 
-}
+        <!-- Round Controls -->
+        <div>
+            <button class="start-btn" onclick="startRound()">Start Buzzer</button>
+        </div>
 
-// ================= QUESTION BOARD =================
-function showBoard(level, btn) {
-    currentLevel = level;
-    renderBoard(level);
-    localStorage.setItem("enableBuzzer", "false");
+        <h2>First to Buzz:</h2>
+        <h1 id="firstBuzz">None yet</h1>
+        <div class="circle-timer">
+            <svg>
+        <circle class="bg" cx="60" cy="60" r="54"></circle>
+        <circle class="progress" id="circleProgress" cx="60" cy="60" r="54"></circle>
+      </svg>
+            <div class="time-text" id="circleTime">10</div>
+        </div>
 
-    // button highlight
-    document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("selected"));
-    if (btn) btn.classList.add("selected");
+        <h2>Submitted Answer:</h2>
+        <div id="submittedAnswer" style="font-size:22px;color:yellow;">⏳</div>
 
-    resetTurnState();
-}
+        <!-- Reveal Area -->
+        <div id="revealAnswer" style="margin-top:15px;font-size:20px;color:cyan;"></div>
 
-function renderBoard(level) {
-    let container = document.getElementById("questionBox");
-    container.innerHTML = "";
-    container.classList.add("board");
+        <!-- Steal Notice -->
+        <div id="stealNotice" style="color:orange;font-weight:bold;margin-top:10px;"></div>
 
-    questions[level].forEach((q, idx) => {
-        let item = document.createElement("div");
-        item.className = "board-item";
-        item.dataset.index = idx;
-        item.innerText = (idx + 1);
+        <h2>Choose Level:</h2>
+        <button class="level-btn" onclick="showBoard('easy', this)">Easy (100 pts)</button>
+        <button class="level-btn" onclick="showBoard('medium', this)">Medium (300 pts)</button>
+        <button class="level-btn" onclick="showBoard('hard', this)">Hard (500 pts)</button>
 
-        item.onclick = () => revealQuestion(idx, q, item, level);
+        <!-- Question Grid -->
+        <div id="questionBox" class="board"></div>
 
-        container.appendChild(item);
-    });
-}
+        <h2>Scoreboard</h2>
+        <table>
+            <tr>
+                <th>Team</th>
+                <th>Score</th>
+            </tr>
+            <tr>
+                <td>Zack</td>
+                <td id="scoreZack">0</td>
+            </tr>
+            <tr>
+                <td>Ryan</td>
+                <td id="scoreRyan">0</td>
+            </tr>
+            <tr>
+                <td>Kyle</td>
+                <td id="scoreKyle">0</td>
+            </tr>
+        </table>
 
-function revealQuestion(index, question, element, level) {
-    if (element.classList.contains("revealed")) return;
+        <button style="margin-top:20px;background:orange;" onclick="resetGame()">🔄 Reset Game</button>
+    </div>
 
-    if (level === "medium" && question.img) {
-        element.innerHTML = question.q + "<br><img src='" + question.img + "' style='width:150px;margin-top:5px;'>";
-    } else {
-        element.innerText = question.q;
-    }
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <h2>Game Settings</h2>
+            <label>Buzz Time (seconds):</label><br>
+            <input type="number" id="buzzTimeInput" min="3" value="10"><br>
 
-    element.classList.add("revealed");
+            <label>Answer Time (seconds):</label><br>
+            <input type="number" id="answerTimeInput" min="3" value="15"><br>
 
-    localStorage.setItem("currentQuestion", question.q);
-    currentQIndex = index;
-    resetTurnState(); // reset per-question state when opening a fresh tile
-}
+            <button class="btn-save" onclick="saveSettings()">Save</button>
+            <button class="btn-close" onclick="closeSettingsModal()">Close</button>
+        </div>
+    </div>
 
-// Lock box after answered
-function lockQuestion(level, index) {
-    let container = document.getElementById("questionBox");
-    let items = container.querySelectorAll(".board-item");
-    if (items[index]) {
-        items[index].classList.add("revealed");
-        items[index].onclick = null;
-    }
-}
+    <!-- Sounds -->
+    <audio id="buzzSound" src="sound/buzzSound.mp3"></audio>
+    <audio id="correctSound" src="sound/correctSound.wav"></audio>
+    <audio id="wrongSound" src="sound/wrongSound.wav"></audio>
+    <audio id="beepSound" src="sound/countdown.wav" preload="auto"></audio>
 
+    <!-- High pitch beep (5s–1s) -->
+    <audio id="beepHighSound" src="sound/countdown2.wav" preload="auto"></audio>
 
-// ✅ Override handleTeamWrongOrTimeout para limit 1 steal
-const originalHandleWrong = handleTeamWrongOrTimeout;
-handleTeamWrongOrTimeout = function(team, reasonLabel = "WRONG") {
-    // call original to mark OUT
-    originalHandleWrong(team, reasonLabel);
-
-    const outs = getOutTeams();
-    if (outs.length >= 3) {
-        revealCorrectAnswerAndLock();
-    } else {
-        // only allow steal once
-        startStealMode(team);
-    }
-};
-
-// ✅ Reset steal flag per new round/question
-const originalResetTurnState = resetTurnState;
-resetTurnState = function() {
-    stealUsed = false;
-    originalResetTurnState();
-};
+    <!-- Time's up buzzer -->
+    <audio id="timesUpSound" src="sound/timesup.wav" preload="auto"></audio>
 
 
+    <script src="script.js"></script>
+</body>
+
+</html>
