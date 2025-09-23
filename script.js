@@ -1,32 +1,3 @@
-import {
-      initializeApp
-    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-
-import {
-      getDatabase,
-      ref,
-      set,
-      get,
-      remove,
-      onValue
-    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
-      authDomain: "gygames-fafcb.firebaseapp.com",
-      databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
-      projectId: "gygames-fafcb",
-      storageBucket: "gygames-fafcb.firebasestorage.app",
-      messagingSenderId: "603231637988",
-      appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
-      measurementId: "G-058J8NLC43"
-    };
-
-    // Init
-    const app = initializeApp(firebaseConfig);
-    window.db = getDatabase(app);
-
-
 // ================= VARIABLES =================
 let scores = JSON.parse(localStorage.getItem("scores")) || { Zack: 0, Ryan: 0, Kyle: 0 };
 let currentLevel = "easy";
@@ -562,4 +533,5 @@ resetTurnState = function() {
     stealUsed = false;
     originalResetTurnState();
 };
+
 
