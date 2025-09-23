@@ -1,61 +1,34 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getDatabase, ref, set, get, remove, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+>
+    import {
+      initializeApp
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      set,
+      get,
+      remove,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
-    authDomain: "gygames-fafcb.firebaseapp.com",
-    databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
-    projectId: "gygames-fafcb",
-    storageBucket: "gygames-fafcb.firebasestorage.app",
-    messagingSenderId: "603231637988",
-    appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
-    measurementId: "G-058J8NLC43"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
+      authDomain: "gygames-fafcb.firebaseapp.com",
+      databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com/",
+      projectId: "gygames-fafcb",
+      storageBucket: "gygames-fafcb.firebasestorage.app",
+      messagingSenderId: "603231637988",
+      appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+      measurementId: "G-058J8NLC43"
+    };
 
-// Init
-const app = initializeApp(firebaseConfig);
-window.db = getDatabase(app);
-
-
-// ============ FIREBASE WRAPPER ============
-
-// SET
-async function fbSet(key, value) {
-    return set(ref(db, key), value);
-}
-
-// GET
-async function fbGet(key) {
-    const snapshot = await get(ref(db, key));
-    return snapshot.exists() ? snapshot.val() : null;
-}
-
-// REMOVE
-async function fbRemove(key) {
-    return remove(ref(db, key));
-}
-
-// LISTENER (kapalit ng window.addEventListener("storage", ...))
-function fbOnChange(key, callback) {
-    onValue(ref(db, key), (snapshot) => {
-        callback(snapshot.val());
-    });
-}
-
+    // Init
+    const app = initializeApp(firebaseConfig);
+    window.db = getDatabase(app);
 
 
 // ================= VARIABLES =================
-let scores = { Zack: 0, Ryan: 0, Kyle: 0 };
-
-async function initGame() {
-    let savedScores = await fbGet("scores");
-    if (savedScores) scores = savedScores;
-    updateScores();
-}
-
-// tawagin agad
-initGame();
-
+let scores = JSON.parse(localStorage.getItem("scores")) || { Zack: 0, Ryan: 0, Kyle: 0 };
 let currentLevel = "easy";
 let currentQIndex = 0;
 let timerInterval;
@@ -130,20 +103,20 @@ const questions = {
 };
 
 // ----------------- helpers for per-question state -----------------
-async function getOutTeams() {
-    try { return await fbGet("outTeams") || []; } catch { return []; }
+function getOutTeams() {
+    try { return JSON.parse(localStorage.getItem("outTeams")) || []; } catch { return []; }
 }
 
 function setOutTeams(arr) {
-    fbSet("outTeams", arr);
+    localStorage.setItem("outTeams", JSON.stringify(arr));
 }
 
 function resetTurnState() {
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
-    fbRemove("buzzed");
-    fbRemove("stealMode");
-    fbRemove("submittedAnswer");
+    localStorage.removeItem("buzzed");
+    localStorage.removeItem("stealMode");
+    localStorage.removeItem("submittedAnswer");
     setOutTeams([]);
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "⏳";
@@ -167,23 +140,16 @@ function startRound() {
     mode = "buzz";
 
     resetTurnState();
-    fbSet("enableBuzzer", true);
-    fbSet("buzzed", "");
-    fbSet("answeringTeam", "");
+    localStorage.setItem("enableBuzzer", "true");
+    localStorage.setItem("buzzed", "");
+    localStorage.setItem("answeringTeam", "");
 
     updateCircle(buzzTime, "lime", buzzTime);
     document.getElementById("circleTime").textContent = timeLeft;
     document.getElementById("firstBuzz").textContent = "None yet";
     document.getElementById("stealNotice").textContent = ""; // clear message
 
-    fbOnChange("buzzed", (team) => {
-        if (team) {
-            document.getElementById("firstBuzz").textContent = team;
-            fbSet("answeringTeam", team);
-            fbSet("enableBuzzer", false);
-            switchToAnswer(team);
-        }
-    });
+    window.addEventListener("storage", stopOnBuzz);
 
     countdownInterval = setInterval(runTimer, 1000);
 }
@@ -201,7 +167,7 @@ function runTimer() {
         if (timeLeft <= 0) {
             // nobody buzzed
             clearInterval(countdownInterval);
-            fbSet("enableBuzzer", false);
+            localStorage.setItem("enableBuzzer", "false");
             window.removeEventListener("storage", stopOnBuzz);
 
             document.getElementById("circleTime").textContent = "⏳ No Buzz";
@@ -230,8 +196,8 @@ function stopOnBuzz(e) {
     if (e.key === "buzzed" && e.newValue) {
         const team = e.newValue;
         document.getElementById("firstBuzz").textContent = team;
-        fbSet("answeringTeam", team);
-        fbSet("enableBuzzer", false);
+        localStorage.setItem("answeringTeam", team);
+        localStorage.setItem("enableBuzzer", "false");
         switchToAnswer(team);
     }
 }
@@ -273,12 +239,9 @@ function playSound(id) {
 
 function resetGame() {
     scores = { Zack: 0, Ryan: 0, Kyle: 0 };
-    fbSet("scores", scores);
+    localStorage.setItem("scores", JSON.stringify(scores));
     updateScores();
-    fbRemove("buzzed");
-    fbRemove("stealMode");
-    fbRemove("submittedAnswer");
-    fbRemove("outTeams");
+    localStorage.clear();
     location.reload();
 }
 
@@ -310,8 +273,8 @@ function submitAnswer() {
     let team = sessionStorage.getItem("team");
     let ans = document.getElementById("teamAnswer").value;
     if (team && ans) {
-        fbSet("teamAnswer_" + team, ans);
-        fbSet("submittedAnswer", ans);
+        localStorage.setItem("teamAnswer_" + team, ans);
+        localStorage.setItem("submittedAnswer", ans);
         document.getElementById("answerArea").style.display = "none";
         clearInterval(answerTimerInterval); // stop countdown on Admin when someone submits
     }
@@ -330,8 +293,8 @@ function startAnswerTimer(team) {
     }
 
     clearInterval(answerTimerInterval);
-    answerTimerInterval = setInterval(async() => { // <-- ginawa kong async
-        let ans = await fbGet("teamAnswer_" + team) || ""; // <-- Firebase na
+    answerTimerInterval = setInterval(() => {
+        let ans = localStorage.getItem("teamAnswer_" + team) || "";
         if (ans) {
             clearInterval(answerTimerInterval);
             answerTimerInterval = null;
@@ -363,8 +326,8 @@ function startAnswerTimer(team) {
             handleTeamWrongOrTimeout(team, "TIME UP");
         }
     }, 1000);
-}
 
+}
 
 
 
@@ -381,8 +344,8 @@ function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     setOutTeams(outs);
 
     // clear that team's pending state
-    fbRemove("buzzed");
-    fbRemove("teamAnswer_" + team);
+    localStorage.removeItem("buzzed");
+    localStorage.removeItem("teamAnswer_" + team);
 
     // Decide: still allow steal or reveal
     if (outs.length >= 3) {
@@ -390,7 +353,7 @@ function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         revealCorrectAnswerAndLock();
     } else {
         // Enable steal for remaining teams
-        fbSet("stealMode", team);
+        localStorage.setItem("stealMode", team);
         if (document.getElementById("stealNotice")) {
             document.getElementById("stealNotice").innerText =
                 "🚨 STEAL MODE: " + team + " is OUT! Other teams can buzz.";
@@ -413,9 +376,9 @@ function revealCorrectAnswerAndLock() {
     lockQuestion(currentLevel, currentQIndex);
 
     // fully stop/clear turn
-    fbSet("enableBuzzer", false);
-    fbRemove("buzzed");
-    fbRemove("stealMode");
+    localStorage.setItem("enableBuzzer", "false");
+    localStorage.removeItem("buzzed");
+    localStorage.removeItem("stealMode");
     setOutTeams([]);
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
@@ -423,15 +386,14 @@ function revealCorrectAnswerAndLock() {
 
 // ================= AUTO-CHECK BUZZ =================
 if (document.getElementById("firstBuzz")) {
-    setInterval(async() => { // <-- gawing async
-
-        let buzzed = await fbGet("buzzed");
+    setInterval(() => {
+        let buzzed = localStorage.getItem("buzzed");
 
         if (buzzed) {
             // show who buzzed
             document.getElementById("firstBuzz").innerText = buzzed;
             // close buzzer while this team answers
-            await fbSet("enableBuzzer", false);
+            localStorage.setItem("enableBuzzer", "false");
 
             // start 20s answer window for this buzzing team
             if (!answerTimerInterval) {
@@ -439,7 +401,7 @@ if (document.getElementById("firstBuzz")) {
             }
 
             // check if they already submitted an answer
-            let ans = await fbGet("teamAnswer_" + buzzed) || "";
+            let ans = localStorage.getItem("teamAnswer_" + buzzed) || "";
             if (ans) {
                 // reflect to Admin immediately
                 if (document.getElementById("submittedAnswer")) {
@@ -454,7 +416,7 @@ if (document.getElementById("firstBuzz")) {
                     playSound("correctSound");
                     let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
                     scores[buzzed] += points;
-                    await fbSet("scores", scores);
+                    localStorage.setItem("scores", JSON.stringify(scores));
                     updateScores();
                     highlightScore(buzzed);
                     alert(buzzed + " is CORRECT! +" + points + " pts");
@@ -467,15 +429,14 @@ if (document.getElementById("firstBuzz")) {
 
                     // show correct on Admin
                     if (document.getElementById("submittedAnswer")) {
-                        document.getElementById("submittedAnswer").innerText =
-                            "✅ Correct: " + questions[currentLevel][currentQIndex].a;
+                        document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
                     }
 
                     // lock the question and reset turn state
                     lockQuestion(currentLevel, currentQIndex);
-                    await fbRemove("buzzed");
-                    await fbRemove("teamAnswer_" + buzzed);
-                    await fbRemove("stealMode");
+                    localStorage.removeItem("buzzed");
+                    localStorage.removeItem("teamAnswer_" + buzzed);
+                    localStorage.removeItem("stealMode");
                     setOutTeams([]);
                 } else {
                     // wrong answer -> mark OUT, allow steal or reveal
@@ -489,40 +450,29 @@ if (document.getElementById("firstBuzz")) {
     }, 300);
 }
 
-
 // ================= TEAM BUZZER =================
-// 🔑 Generate or reuse unique playerId
-let playerId = localStorage.getItem("playerId");
-if (!playerId) {
-    playerId = "p" + Date.now() + "_" + Math.floor(Math.random() * 1000);
-    localStorage.setItem("playerId", playerId);
-}
-
 if (document.getElementById("buzzerBtn")) {
-    setInterval(async() => { // ✅ gawing async para gumana ang await
-
-        let enable = await fbGet("enableBuzzer");
-        let stealFrom = await fbGet("stealMode");
-        let alreadyBuzzed = await fbGet("buzzed");
-
-        // 🔥 Team assignment stored in Firebase
-        let team = await fbGet("team_" + playerId);
-
-        const outs = await getOutTeams();
+    setInterval(() => {
+        let enable = localStorage.getItem("enableBuzzer") === "true";
+        let stealFrom = localStorage.getItem("stealMode");
+        let team = sessionStorage.getItem("team");
+        let alreadyBuzzed = localStorage.getItem("buzzed");
+        const outs = getOutTeams();
 
         const canSteal = stealFrom && stealFrom !== team && !alreadyBuzzed && !outs.includes(team);
         const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
 
-        document.getElementById("buzzerBtn").disabled = !(canNormal || canSteal);
-
+        if (canNormal || canSteal) {
+            document.getElementById("buzzerBtn").disabled = false;
+        } else {
+            document.getElementById("buzzerBtn").disabled = true;
+        }
     }, 200);
 
-    document.getElementById("buzzerBtn").onclick = async() => {
-        let team = await fbGet("team_" + playerId);
+    document.getElementById("buzzerBtn").onclick = () => {
+        let team = sessionStorage.getItem("team");
         if (team) {
-            // ✅ Save which team buzzed
-            await fbSet("buzzed", team);
-
+            localStorage.setItem("buzzed", team);
             document.getElementById("buzzerBtn").disabled = true;
             document.getElementById("answerArea").style.display = "block";
             playSound("buzzSound");
@@ -531,14 +481,14 @@ if (document.getElementById("buzzerBtn")) {
             startAnswerTimer(team);
         }
     };
-}
 
+}
 
 // ================= QUESTION BOARD =================
 function showBoard(level, btn) {
     currentLevel = level;
     renderBoard(level);
-    fbSet("enableBuzzer", false);
+    localStorage.setItem("enableBuzzer", "false");
 
     // button highlight
     document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("selected"));
@@ -575,7 +525,7 @@ function revealQuestion(index, question, element, level) {
 
     element.classList.add("revealed");
 
-    fbSet("currentQuestion", question.q);
+    localStorage.setItem("currentQuestion", question.q);
     currentQIndex = index;
     resetTurnState(); // reset per-question state when opening a fresh tile
 }
@@ -612,19 +562,3 @@ resetTurnState = function() {
     stealUsed = false;
     originalResetTurnState();
 };
-
-
-window.startRound = startRound;
-window.resetGame = resetGame;
-window.openSettingsModal = openSettingsModal;
-window.closeSettingsModal = closeSettingsModal;
-window.saveSettings = saveSettings;
-
-// 🔗 Bind buttons by ID (in case wala kang onclick sa HTML)
-document.getElementById("startBtn")?.addEventListener("click", startRound);
-document.getElementById("resetBtn")?.addEventListener("click", resetGame);
-document.getElementById("settingsIcon")?.addEventListener("click", openSettingsModal);
-document.getElementById("saveSettingsBtn")?.addEventListener("click", saveSettings);
-document.getElementById("closeSettingsBtn")?.addEventListener("click", closeSettingsModal);
-
-
