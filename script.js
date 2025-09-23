@@ -1,5 +1,19 @@
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getDatabase, ref, set, get, remove, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+this code is used local storage. can you convert this using firebase version? 
+
+Note: don't modify my code or logic og my code.
+
+import {
+      initializeApp
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+
+import {
+      getDatabase,
+      ref,
+      set,
+      get,
+      remove,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADxgFTvu0iyYC_ano36TfClPsH4YfqzE",
@@ -16,129 +30,48 @@
     const app = initializeApp(firebaseConfig);
     window.db = getDatabase(app);
 
-    // ================= FIREBASE WRAPPER =================
-    const gamePath = "gameState"; // store everything under this node
 
-    function fbRef(key) {
-      return ref(window.db, `${gamePath}/${key}`);
-    }
+// ================= VARIABLES =================
+let scores = JSON.parse(localStorage.getItem("scores")) || { Zack: 0, Ryan: 0, Kyle: 0 };
+let currentLevel = "easy";
+let currentQIndex = 0;
+let timerInterval;
+let answerTimerInterval;
 
-    window.localStorage = {
-      async getItem(key) {
-        const snap = await get(fbRef(key));
-        return snap.exists() ? snap.val() : null;
-      },
-      async setItem(key, value) {
-        await set(fbRef(key), value);
-      },
-      async removeItem(key) {
-        await remove(fbRef(key));
-      },
-      async clear() {
-        await remove(ref(window.db, gamePath));
-      },
-      _listeners: {},
-      addEventListener(event, callback) {
-        if (event === "storage") {
-          if (!this._listeners[event]) this._listeners[event] = [];
-          this._listeners[event].push(callback);
-        }
-      },
-      removeEventListener(event, callback) {
-        if (this._listeners[event]) {
-          this._listeners[event] =
-            this._listeners[event].filter(cb => cb !== callback);
-        }
-      },
-    };
+let buzzTime = 10; // ✅ default 10s
+let answerTime = 20; // ✅ default 20s
 
-    function subscribeKey(key) {
-      onValue(fbRef(key), (snap) => {
-        const newValue = snap.val();
-        if (window.localStorage._listeners["storage"]) {
-          window.localStorage._listeners["storage"].forEach((cb) => {
-            cb({ key, newValue });
-          });
-        }
-      });
-    }
+// ================= SETTINGS =================
+function openSettingsModal() {
+    document.getElementById("settingsModal").style.display = "flex";
+    document.getElementById("buzzTimeInput").value = buzzTime;
+    document.getElementById("answerTimeInput").value = answerTime;
+}
 
-    // subscribe to important keys
-    ["buzzed", "enableBuzzer", "stealMode", "scores", "submittedAnswer", "outTeams"].forEach(subscribeKey);
+function closeSettingsModal() {
+    document.getElementById("settingsModal").style.display = "none";
+}
 
-    // ================= VARIABLES =================
-    let scores = { Zack: 0, Ryan: 0, Kyle: 0 }; // default
-    let currentLevel = "easy";
-    let currentQIndex = 0;
-    let timerInterval;
-    let answerTimerInterval;
+function saveSettings() {
+    buzzTime = parseInt(document.getElementById("buzzTimeInput").value) || 10;
+    answerTime = parseInt(document.getElementById("answerTimeInput").value) || 20;
 
-    let buzzTime = 10; // ✅ default 10s
-    let answerTime = 20; // ✅ default 20s
+    alert("Settings saved! Buzz Time: " + buzzTime + "s, Answer Time: " + answerTime + "s");
 
-    // ================= SETTINGS =================
-    function openSettingsModal() {
-      document.getElementById("settingsModal").style.display = "flex";
-      document.getElementById("buzzTimeInput").value = buzzTime;
-      document.getElementById("answerTimeInput").value = answerTime;
-    }
-
-    function closeSettingsModal() {
-      document.getElementById("settingsModal").style.display = "none";
-    }
-
-    function saveSettings() {
-      buzzTime = parseInt(document.getElementById("buzzTimeInput").value) || 10;
-      answerTime = parseInt(document.getElementById("answerTimeInput").value) || 20;
-
-      alert("Settings saved! Buzz Time: " + buzzTime + "s, Answer Time: " + answerTime + "s");
-
-      if (mode === "buzz") {
+    // ✅ Update circle immediately if a round is running
+    if (mode === "buzz") {
         timeLeft = buzzTime;
         updateCircle(buzzTime, "lime", buzzTime);
         document.getElementById("circleTime").textContent = timeLeft;
-      } else if (mode === "answer") {
+    } else if (mode === "answer") {
         timeLeft = answerTime;
         updateCircle(answerTime, "yellow", answerTime);
         document.getElementById("circleTime").textContent = timeLeft;
-      }
-
-      closeSettingsModal();
     }
 
-    // ================= QUESTIONS =================
-    const questions = {
-      easy: [
-        { q: "Who was the first President of the United States?", a: "George Washington" },
-        { q: "Who is known as the Father of the Philippine Revolution?", a: "Andres Bonifacio" },
-        { q: "In what year did the Philippines gain independence from Spain?", a: "1898" },
-        { q: "Who wrote the Declaration of Independence?", a: "Thomas Jefferson" },
-        { q: "What event started the American Revolution?", a: "Battles of Lexington and Concord" },
-        { q: "Who is the national hero of the Philippines?", a: "Jose Rizal" },
-        { q: "What was the first capital of the United States?", a: "Philadelphia" },
-        { q: "Who led the Katipunan during the Philippine Revolution?", a: "Andres Bonifacio" }
-      ],
-      medium: [
-        { q: "Guess the country flag:", a: "japan", img: "https://upload.wikimedia.org/wikipedia/en/9/9e/Flag_of_Japan.svg" },
-        { q: "Guess the country flag:", a: "france", img: "https://upload.wikimedia.org/wikipedia/en/c/c3/Flag_of_France.svg" },
-        { q: "Guess the country flag:", a: "germany", img: "https://upload.wikimedia.org/wikipedia/en/b/ba/Flag_of_Germany.svg" },
-        { q: "Guess the country flag:", a: "italy", img: "https://upload.wikimedia.org/wikipedia/en/0/03/Flag_of_Italy.svg" },
-        { q: "Guess the country flag:", a: "brazil", img: "https://upload.wikimedia.org/wikipedia/en/0/05/Flag_of_Brazil.svg" },
-        { q: "Guess the country flag:", a: "canada", img: "https://upload.wikimedia.org/wikipedia/commons/c/cf/Flag_of_Canada.svg" },
-        { q: "Guess the country flag:", a: "india", img: "https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" },
-        { q: "Guess the country flag:", a: "south korea", img: "https://upload.wikimedia.org/wikipedia/commons/0/09/Flag_of_South_Korea.svg" }
-      ],
-      hard: [
-        { q: "What particle carries a negative electric charge?", a: "Electron" },
-        { q: "What is the most abundant gas in Earth's atmosphere?", a: "Nitrogen" },
-        { q: "What force keeps planets in orbit around the Sun?", a: "Gravity" },
-        { q: "Which part of the atom has no electric charge?", a: "Neutron" },
-        { q: "Which blood type is known as the universal donor?", a: "O negative" },
-        { q: "Which organ in the human body produces insulin?", a: "Pancreas" },
-        { q: "What is the largest planet in our solar system?", a: "Jupiter" },
-        { q: "Who proposed the three laws of motion?", a: "Isaac Newton" }
-      ]
-    };
+    closeSettingsModal();
+}
+
 // ================= QUESTIONS =================
 const questions = {
     easy: [
@@ -633,5 +566,3 @@ resetTurnState = function() {
     stealUsed = false;
     originalResetTurnState();
 };
-
-
