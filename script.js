@@ -1,7 +1,3 @@
-this code is used local storage. can you convert this using firebase version? 
-
-Note: don't modify my code or logic og my code.
-
 import {
       initializeApp
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
@@ -566,3 +562,4 @@ resetTurnState = function() {
     stealUsed = false;
     originalResetTurnState();
 };
+
