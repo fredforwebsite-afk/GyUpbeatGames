@@ -647,6 +647,38 @@ resetTurnState = async function () {
 };
 
 
+// Wait for DOM to be ready
+document.addEventListener("DOMContentLoaded", () => {
+  // Team select buttons
+  document.querySelectorAll(".team-choice").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const team = btn.dataset.team;
+      selectTeam(team);
+    });
+  });
+
+  // Submit answer button
+  const submitBtn = document.getElementById("submitAnswerBtn");
+  if (submitBtn) {
+    submitBtn.addEventListener("click", submitAnswer);
+  }
+
+  // Buzzer button (already handled in your code, but safer here too)
+  const buzzerBtn = document.getElementById("buzzerBtn");
+  if (buzzerBtn) {
+    buzzerBtn.addEventListener("click", async () => {
+      let team = sessionStorage.getItem("team");
+      if (team) {
+        await updateDoc(gameRef, { buzzed: team });
+        buzzerBtn.disabled = true;
+        document.getElementById("answerArea").style.display = "block";
+        playSound("buzzSound");
+      }
+    });
+  }
+});
+
+
 // expose functions to global window for onclick usage
 window.startRound = startRound;
 window.resetGame = resetGame;
@@ -656,5 +688,6 @@ window.selectTeam = selectTeam;
 window.submitAnswer = submitAnswer;
 window.switchToAnswer = switchToAnswer;
 window.lockQuestion = lockQuestion;
+
 
 
