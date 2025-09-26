@@ -1,12 +1,47 @@
+// ================= FIREBASE SETUP =================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteField, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyADxgFTvu0iycYC_ano36TFclPSh4YfqzE",
+  authDomain: "gygames-fafcb.firebaseapp.com",
+  databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com",
+  projectId: "gygames-fafcb",
+  storageBucket: "gygames-fafcb.firebasestorage.app",
+  messagingSenderId: "603231637988",
+  appId: "1:603231637988:web:31ac4e91fcd58935ffb7f1",
+  measurementId: "G-058J8NLC43"
+};
+
+// ✅ Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 // ================= VARIABLES =================
-let scores = JSON.parse(localStorage.getItem("scores")) || { Zack: 0, Ryan: 0, Kyle: 0 };
+let scores = { Zack: 0, Ryan: 0, Kyle: 0 };
 let currentLevel = "easy";
 let currentQIndex = 0;
 let timerInterval;
 let answerTimerInterval;
 
-let buzzTime = 10; // ✅ default 10s
+let buzzTime = 10;   // ✅ default 10s
 let answerTime = 20; // ✅ default 20s
+
+// ✅ Load scores from Firestore
+async function loadScores() {
+  const docRef = doc(db, "gameData", "scores");
+  const docSnap = await getDoc(docRef);
+
+  if (docSnap.exists()) {
+    scores = docSnap.data();
+  } else {
+    // If no scores exist yet, create them
+    await setDoc(docRef, scores);
+  }
+}
+
+await loadScores();
+
 
 
 // ================= QUESTIONS =================
@@ -43,447 +78,579 @@ const questions = {
     ]
 };
 
+
+
 // ----------------- helpers for per-question state -----------------
-function getOutTeams() {
-    try { return JSON.parse(localStorage.getItem("outTeams")) || []; } catch { return []; }
+
+// ✅ Load outTeams from Firestore
+async function getOutTeams() {
+  const docRef = doc(db, "gameData", "state");
+  const docSnap = await getDoc(docRef);
+
+  if (docSnap.exists()) {
+    return docSnap.data().outTeams || [];
+  } else {
+    return [];
+  }
 }
 
-function setOutTeams(arr) {
-    localStorage.setItem("outTeams", JSON.stringify(arr));
+// ✅ Save outTeams to Firestore
+async function setOutTeams(arr) {
+  const docRef = doc(db, "gameData", "state");
+  await setDoc(docRef, { outTeams: arr }, { merge: true });
 }
 
-function resetTurnState() {
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = null;
-    localStorage.removeItem("buzzed");
-    localStorage.removeItem("stealMode");
-    localStorage.removeItem("submittedAnswer");
-    setOutTeams([]);
-    if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "⏳";
-    }
-    if (document.getElementById("firstBuzz")) {
-        document.getElementById("firstBuzz").innerText = "None yet";
-    }
-    if (document.getElementById("stealNotice")) {
-        document.getElementById("stealNotice").innerText = "";
-    }
+// ✅ Reset state between turns
+async function resetTurnState() {
+  clearInterval(answerTimerInterval);
+  answerTimerInterval = null;
+
+  const docRef = doc(db, "gameData", "state");
+
+  // Clear Firestore state
+  await updateDoc(docRef, {
+    buzzed: deleteField(),
+    stealMode: deleteField(),
+    submittedAnswer: deleteField(),
+    outTeams: []
+  }).catch(async () => {
+    // If state doc doesn't exist, create it fresh
+    await setDoc(docRef, { outTeams: [] });
+  });
+
+  // ✅ Reset UI elements (same as before)
+  if (document.getElementById("submittedAnswer")) {
+    document.getElementById("submittedAnswer").innerText = "⏳";
+  }
+  if (document.getElementById("firstBuzz")) {
+    document.getElementById("firstBuzz").innerText = "None yet";
+  }
+  if (document.getElementById("stealNotice")) {
+    document.getElementById("stealNotice").innerText = "";
+  }
 }
+
 
 // ================= ADMIN FUNCTIONS =================
 let countdownInterval;
 let timeLeft = buzzTime;
 let mode = "buzz"; // "buzz" or "answer"
 
-function startRound() {
-    clearInterval(countdownInterval);
-    timeLeft = buzzTime;
-    mode = "buzz";
+// ✅ Start a new round
+async function startRound() {
+  clearInterval(countdownInterval);
+  timeLeft = buzzTime;
+  mode = "buzz";
 
-    resetTurnState();
-    localStorage.setItem("enableBuzzer", "true");
-    localStorage.setItem("buzzed", "");
-    localStorage.setItem("answeringTeam", "");
+  await resetTurnState();
 
-    updateCircle(buzzTime, "lime", buzzTime);
-    document.getElementById("circleTime").textContent = timeLeft;
-    document.getElementById("firstBuzz").textContent = "None yet";
-    document.getElementById("stealNotice").textContent = ""; // clear message
+  const stateRef = doc(db, "gameData", "state");
+  await setDoc(stateRef, {
+    enableBuzzer: true,
+    buzzed: "",
+    answeringTeam: ""
+  }, { merge: true });
 
-    window.addEventListener("storage", stopOnBuzz);
+  updateCircle(buzzTime, "lime", buzzTime);
+  document.getElementById("circleTime").textContent = timeLeft;
+  document.getElementById("firstBuzz").textContent = "None yet";
+  document.getElementById("stealNotice").textContent = "";
 
-    countdownInterval = setInterval(runTimer, 1000);
+  // ✅ Real-time Firestore listener instead of storage event
+  onSnapshot(stateRef, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.buzzed) stopOnBuzz(data.buzzed);
+    }
+  });
+
+  countdownInterval = setInterval(runTimer, 1000);
 }
 
+// ✅ Timer logic
 function runTimer() {
-    timeLeft--;
-    document.getElementById("circleTime").textContent = timeLeft;
+  timeLeft--;
+  document.getElementById("circleTime").textContent = timeLeft;
 
-    if (mode === "buzz") {
-        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
+  if (mode === "buzz") {
+    updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
 
-        if (timeLeft > 5) playSound("beepSound");
-        else if (timeLeft > 0) playSound("beepHighSound");
+    if (timeLeft > 5) playSound("beepSound");
+    else if (timeLeft > 0) playSound("beepHighSound");
 
-        if (timeLeft <= 0) {
-            // nobody buzzed
-            clearInterval(countdownInterval);
-            localStorage.setItem("enableBuzzer", "false");
-            window.removeEventListener("storage", stopOnBuzz);
+    if (timeLeft <= 0) {
+      clearInterval(countdownInterval);
 
-            document.getElementById("circleTime").textContent = "⏳ No Buzz";
-            playSound("timesUpSound");
+      const stateRef = doc(db, "gameData", "state");
+      updateDoc(stateRef, { enableBuzzer: false });
 
-            // ✅ show admin option to retry
-            document.getElementById("stealNotice").innerHTML =
-                `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
-        }
-    } else if (mode === "answer") {
-        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
+      document.getElementById("circleTime").textContent = "⏳ No Buzz";
+      playSound("timesUpSound");
 
-        if (timeLeft > 5) playSound("beepSound");
-        else if (timeLeft > 0) playSound("beepHighSound");
-
-        if (timeLeft <= 0) {
-            clearInterval(countdownInterval);
-            document.getElementById("circleTime").textContent = "⏳ Time's up!";
-            playSound("timesUpSound");
-        }
+      document.getElementById("stealNotice").innerHTML =
+        `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
     }
+  } else if (mode === "answer") {
+    updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
+
+    if (timeLeft > 5) playSound("beepSound");
+    else if (timeLeft > 0) playSound("beepHighSound");
+
+    if (timeLeft <= 0) {
+      clearInterval(countdownInterval);
+      document.getElementById("circleTime").textContent = "⏳ Time's up!";
+      playSound("timesUpSound");
+    }
+  }
 }
 
-// 🛑 If a team buzzes early
-function stopOnBuzz(e) {
-    if (e.key === "buzzed" && e.newValue) {
-        const team = e.newValue;
-        document.getElementById("firstBuzz").textContent = team;
-        localStorage.setItem("answeringTeam", team);
-        localStorage.setItem("enableBuzzer", "false");
-        switchToAnswer(team);
-    }
-}
+// 🛑 Handle a buzz event
+async function stopOnBuzz(team) {
+  if (!team) return;
 
+  document.getElementById("firstBuzz").textContent = team;
+
+  const stateRef = doc(db, "gameData", "state");
+  await updateDoc(stateRef, {
+    answeringTeam: team,
+    enableBuzzer: false
+  });
+
+  switchToAnswer(team);
+}
 
 // 🔄 Switch from buzz mode to answer mode
 function switchToAnswer(team) {
-    clearInterval(countdownInterval);
-    mode = "answer";
-    timeLeft = answerTime;
+  clearInterval(countdownInterval);
+  mode = "answer";
+  timeLeft = answerTime;
 
-    updateCircle(answerTime, "yellow", answerTime);
-    document.getElementById("circleTime").textContent = timeLeft;
+  updateCircle(answerTime, "yellow", answerTime);
+  document.getElementById("circleTime").textContent = timeLeft;
 
-    countdownInterval = setInterval(runTimer, 1000);
-    window.removeEventListener("storage", stopOnBuzz);
+  countdownInterval = setInterval(runTimer, 1000);
 }
 
 // 🎨 Update circle progress
 function updateCircle(time, color, max) {
-    const circle = document.getElementById("circleProgress");
-    const radius = 54;
-    const circumference = 2 * Math.PI * radius;
-    const progress = Math.max(time, 0) / max;
+  const circle = document.getElementById("circleProgress");
+  const radius = 54;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.max(time, 0) / max;
 
-    circle.style.strokeDasharray = circumference;
-    circle.style.strokeDashoffset = circumference - progress * circumference;
-    circle.style.stroke = color;
+  circle.style.strokeDasharray = circumference;
+  circle.style.strokeDashoffset = circumference - progress * circumference;
+  circle.style.stroke = color;
 }
 
 // 🔊 Sound helper
 function playSound(id) {
-    const el = document.getElementById(id);
-    if (el) {
-        el.currentTime = 0;
-        el.play().catch(() => {});
-    }
+  const el = document.getElementById(id);
+  if (el) {
+    el.currentTime = 0;
+    el.play().catch(() => {});
+  }
 }
 
-function resetGame() {
-    scores = { Zack: 0, Ryan: 0, Kyle: 0 };
-    localStorage.setItem("scores", JSON.stringify(scores));
-    updateScores();
-    localStorage.clear();
-    location.reload();
+// ✅ Reset the whole game
+async function resetGame() {
+  scores = { Zack: 0, Ryan: 0, Kyle: 0 };
+
+  const scoresRef = doc(db, "gameData", "scores");
+  await setDoc(scoresRef, scores);
+
+  const stateRef = doc(db, "gameData", "state");
+  await setDoc(stateRef, {}); // clears state
+
+  updateScores();
+  location.reload();
 }
 
-function updateScores() {
-    if (document.getElementById("scoreZack")) {
-        document.getElementById("scoreZack").innerText = scores.Zack;
-        document.getElementById("scoreRyan").innerText = scores.Ryan;
-        document.getElementById("scoreKyle").innerText = scores.Kyle;
-    }
+// ✅ Update score UI
+async function updateScores() {
+  const scoresRef = doc(db, "gameData", "scores");
+  const snap = await getDoc(scoresRef);
+
+  if (snap.exists()) {
+    scores = snap.data();
+  }
+
+  if (document.getElementById("scoreZack")) {
+    document.getElementById("scoreZack").innerText = scores.Zack;
+    document.getElementById("scoreRyan").innerText = scores.Ryan;
+    document.getElementById("scoreKyle").innerText = scores.Kyle;
+  }
 }
 
+// ✅ Highlight a team's score
 function highlightScore(team) {
-    let td = document.getElementById("score" + team);
-    if (td) {
-        td.classList.add("highlight");
-        setTimeout(() => td.classList.remove("highlight"), 1000);
-    }
+  let td = document.getElementById("score" + team);
+  if (td) {
+    td.classList.add("highlight");
+    setTimeout(() => td.classList.remove("highlight"), 1000);
+  }
 }
-
 // ================= TEAM FUNCTIONS =================
 function selectTeam(team) {
-    sessionStorage.setItem("team", team);
-    document.getElementById("teamSelect").style.display = "none";
-    document.getElementById("buzzerArea").style.display = "block";
-    document.getElementById("teamName").innerText = "You are " + team;
+  // ✅ SessionStorage is fine for local identity
+  sessionStorage.setItem("team", team);
+
+  document.getElementById("teamSelect").style.display = "none";
+  document.getElementById("buzzerArea").style.display = "block";
+  document.getElementById("teamName").innerText = "You are " + team;
 }
 
-function submitAnswer() {
-    let team = sessionStorage.getItem("team");
-    let ans = document.getElementById("teamAnswer").value;
-    if (team && ans) {
-        localStorage.setItem("teamAnswer_" + team, ans);
-        localStorage.setItem("submittedAnswer", ans);
-        document.getElementById("answerArea").style.display = "none";
-        clearInterval(answerTimerInterval); // stop countdown on Admin when someone submits
-    }
+async function submitAnswer() {
+  let team = sessionStorage.getItem("team");
+  let ans = document.getElementById("teamAnswer").value;
+
+  if (team && ans) {
+    const stateRef = doc(db, "gameData", "state");
+
+    // ✅ Save answer into Firestore
+    await updateDoc(stateRef, {
+      ["teamAnswer_" + team]: ans,
+      submittedAnswer: ans
+    }).catch(async () => {
+      // If state doc doesn't exist yet, create it
+      await setDoc(stateRef, {
+        ["teamAnswer_" + team]: ans,
+        submittedAnswer: ans
+      });
+    });
+
+    document.getElementById("answerArea").style.display = "none";
+
+    // Stop the admin's countdown
+    clearInterval(answerTimerInterval);
+  }
 }
 
 // ================= ANSWER TIMER =================
-function startAnswerTimer(team) {
-    let sec = answerTime;
+async function startAnswerTimer(team) {
+  let sec = answerTime;
 
-    if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
+  if (document.getElementById("submittedAnswer")) {
+    document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
+  }
+
+  clearInterval(answerTimerInterval);
+  answerTimerInterval = setInterval(async () => {
+    // ✅ check Firestore instead of localStorage
+    const stateRef = doc(db, "gameData", "state");
+    const snap = await getDoc(stateRef);
+    const data = snap.exists() ? snap.data() : {};
+
+    let ans = data["teamAnswer_" + team] || "";
+    if (ans) {
+      clearInterval(answerTimerInterval);
+      answerTimerInterval = null;
+      return;
     }
 
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = setInterval(() => {
-        // stop if that team already submitted
-        let ans = localStorage.getItem("teamAnswer_" + team) || "";
-        if (ans) {
-            clearInterval(answerTimerInterval);
-            answerTimerInterval = null;
-            return;
-        }
+    sec--;
+    if (sec >= 0 && document.getElementById("submittedAnswer")) {
+      document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
+    }
 
-        sec--;
-        if (sec >= 0 && document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
-        }
+    if (sec < 0) {
+      clearInterval(answerTimerInterval);
+      answerTimerInterval = null;
 
-        if (sec < 0) {
-            clearInterval(answerTimerInterval);
-            answerTimerInterval = null;
-
-            if (document.getElementById("submittedAnswer")) {
-                document.getElementById("submittedAnswer").innerText = "❌ No answer submitted";
-            }
-            handleTeamWrongOrTimeout(team, "TIME UP");
-        }
-    }, 1000);
+      if (document.getElementById("submittedAnswer")) {
+        document.getElementById("submittedAnswer").innerText = "❌ No answer submitted";
+      }
+      handleTeamWrongOrTimeout(team, "TIME UP");
+    }
+  }, 1000);
 }
 
-function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
-    if (document.getElementById("firstBuzz")) {
-        document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
-    }
+// ✅ Handle wrong / timeout
+async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
+  if (document.getElementById("firstBuzz")) {
+    document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
+  }
 
-    const outs = getOutTeams();
-    if (!outs.includes(team)) outs.push(team);
-    setOutTeams(outs);
+  const outs = await getOutTeams();
+  if (!outs.includes(team)) outs.push(team);
+  await setOutTeams(outs);
 
-    // alisin answer at buzz state ng maling team
-    localStorage.removeItem("buzzed");
-    localStorage.removeItem("teamAnswer_" + team);
+  const stateRef = doc(db, "gameData", "state");
+  await updateDoc(stateRef, {
+    buzzed: deleteField(),
+    ["teamAnswer_" + team]: deleteField()
+  });
 
-    if (outs.length >= 3) {
-        // lahat mali → i-reveal
-        revealCorrectAnswerAndLock();
-    } else {
-        // may natitirang team/s → enable buzzer para sa kanila
-        localStorage.setItem("enableBuzzer", "true");
-        document.getElementById("stealNotice").innerText =
-            "🚨 STEAL MODE: " + team + " is OUT! Remaining teams may buzz.";
+  if (outs.length >= 3) {
+    // lahat mali → reveal
+    revealCorrectAnswerAndLock();
+  } else {
+    // may natitira → enable buzzer ulit
+    await updateDoc(stateRef, { enableBuzzer: true });
 
-        // reset countdown para sa steal
-        clearInterval(countdownInterval);
-        mode = "buzz";
-        timeLeft = buzzTime;
-        document.getElementById("circleTime").textContent = timeLeft;
-        updateCircle(buzzTime, "lime", buzzTime);
-        countdownInterval = setInterval(runTimer, 1000);
-        window.addEventListener("storage", stopOnBuzz);
-    }
+    document.getElementById("stealNotice").innerText =
+      "🚨 STEAL MODE: " + team + " is OUT! Remaining teams may buzz.";
+
+    clearInterval(countdownInterval);
+    mode = "buzz";
+    timeLeft = buzzTime;
+    document.getElementById("circleTime").textContent = timeLeft;
+    updateCircle(buzzTime, "lime", buzzTime);
+    countdownInterval = setInterval(runTimer, 1000);
+
+    // Firestore snapshot listener is already running → no need for window.addEventListener
+  }
 }
 
+// ✅ Reveal correct answer + lock tile
+async function revealCorrectAnswerAndLock() {
+  const correct = questions[currentLevel][currentQIndex].a;
+  playSound("wrongSound");
+  alert("No team answered correctly. Correct answer is: " + correct);
 
-function revealCorrectAnswerAndLock() {
-    const correct = questions[currentLevel][currentQIndex].a;
-    playSound("wrongSound"); // short cue before reveal (optional)
-    alert("No team answered correctly. Correct answer is: " + correct);
+  if (document.getElementById("submittedAnswer")) {
+    document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
+  }
 
-    // display on Admin panel
-    if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
-    }
+  lockQuestion(currentLevel, currentQIndex);
 
-    // lock question tile
-    lockQuestion(currentLevel, currentQIndex);
+  const stateRef = doc(db, "gameData", "state");
+  await updateDoc(stateRef, {
+    enableBuzzer: false,
+    buzzed: deleteField(),
+    stealMode: deleteField(),
+    outTeams: []
+  });
 
-    // fully stop/clear turn
-    localStorage.setItem("enableBuzzer", "false");
-    localStorage.removeItem("buzzed");
-    localStorage.removeItem("stealMode");
-    setOutTeams([]);
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = null;
+  clearInterval(answerTimerInterval);
+  answerTimerInterval = null;
 }
+
+import { doc, onSnapshot, updateDoc, deleteField, setDoc } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
 
 // ================= AUTO-CHECK BUZZ =================
 if (document.getElementById("firstBuzz")) {
-    setInterval(() => {
-        let buzzed = localStorage.getItem("buzzed");
+  const stateRef = doc(db, "gameData", "state");
 
-        if (buzzed) {
-            // show who buzzed
-            document.getElementById("firstBuzz").innerText = buzzed;
-            // close buzzer while this team answers
-            localStorage.setItem("enableBuzzer", "false");
+  onSnapshot(stateRef, async (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
 
-            // start 20s answer window for this buzzing team
-            if (!answerTimerInterval) {
-                startAnswerTimer(buzzed);
-            }
+    let buzzed = data.buzzed || "";
+    if (!buzzed) return;
 
-            // check if they already submitted an answer
-            let ans = localStorage.getItem("teamAnswer_" + buzzed) || "";
-            if (ans) {
-                // reflect to Admin immediately
-                if (document.getElementById("submittedAnswer")) {
-                    document.getElementById("submittedAnswer").innerText = "📝 " + ans;
-                }
-                clearInterval(answerTimerInterval);
-                answerTimerInterval = null;
+    // show who buzzed
+    document.getElementById("firstBuzz").innerText = buzzed;
 
-                // evaluate
-                let correctAns = questions[currentLevel][currentQIndex].a.trim().toLowerCase();
-                if (ans.trim().toLowerCase() === correctAns) {
-                    playSound("correctSound");
-                    let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
-                    scores[buzzed] += points;
-                    localStorage.setItem("scores", JSON.stringify(scores));
-                    updateScores();
-                    highlightScore(buzzed);
-                    alert(buzzed + " is CORRECT! +" + points + " pts");
+    // close buzzer
+    await updateDoc(stateRef, { enableBuzzer: false });
 
-                    // ✅ Stop at tama ang sagot
-                    clearInterval(countdownInterval);
-                    timeLeft = 0;
-                    document.getElementById("circleTime").textContent = "0";
-                    updateCircle(0, "lime", answerTime);
+    // start 20s answer window
+    if (!answerTimerInterval) {
+      startAnswerTimer(buzzed);
+    }
 
-                    // show correct on Admin
-                    if (document.getElementById("submittedAnswer")) {
-                        document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
-                    }
+    // check if they already submitted an answer
+    let ans = data["teamAnswer_" + buzzed] || "";
+    if (ans) {
+      // reflect answer to Admin immediately
+      if (document.getElementById("submittedAnswer")) {
+        document.getElementById("submittedAnswer").innerText = "📝 " + ans;
+      }
 
-                    // lock the question and reset turn state
-                    lockQuestion(currentLevel, currentQIndex);
-                    localStorage.removeItem("buzzed");
-                    localStorage.removeItem("teamAnswer_" + buzzed);
-                    localStorage.removeItem("stealMode");
-                    setOutTeams([]);
-                } else {
-                    // wrong answer -> mark OUT, allow steal or reveal
-                    playSound("wrongSound");
-                    handleTeamWrongOrTimeout(buzzed, "WRONG");
-                }
-            }
-        }
+      clearInterval(answerTimerInterval);
+      answerTimerInterval = null;
+
+      // evaluate
+      let correctAns = questions[currentLevel][currentQIndex].a.trim().toLowerCase();
+      if (ans.trim().toLowerCase() === correctAns) {
+        playSound("correctSound");
+        let points =
+          currentLevel === "easy" ? 100 :
+          currentLevel === "medium" ? 300 : 500;
+
+        scores[buzzed] += points;
+
+        // save scores to Firestore
+        const scoresRef = doc(db, "gameData", "scores");
+        await setDoc(scoresRef, scores);
 
         updateScores();
-    }, 300);
+        highlightScore(buzzed);
+        alert(buzzed + " is CORRECT! +" + points + " pts");
+
+        // ✅ Stop at tama ang sagot
+        clearInterval(countdownInterval);
+        timeLeft = 0;
+        document.getElementById("circleTime").textContent = "0";
+        updateCircle(0, "lime", answerTime);
+
+        // show correct on Admin
+        if (document.getElementById("submittedAnswer")) {
+          document.getElementById("submittedAnswer").innerText =
+            "✅ Correct: " + questions[currentLevel][currentQIndex].a;
+        }
+
+        // lock the question + reset state
+        lockQuestion(currentLevel, currentQIndex);
+        await updateDoc(stateRef, {
+          buzzed: deleteField(),
+          ["teamAnswer_" + buzzed]: deleteField(),
+          stealMode: deleteField(),
+          outTeams: []
+        });
+
+      } else {
+        // wrong answer → handle steal
+        playSound("wrongSound");
+        handleTeamWrongOrTimeout(buzzed, "WRONG");
+      }
+    }
+
+    updateScores();
+  });
 }
+
 
 // ================= TEAM BUZZER =================
 if (document.getElementById("buzzerBtn")) {
-    setInterval(() => {
-        let enable = localStorage.getItem("enableBuzzer") === "true";
-        let stealFrom = localStorage.getItem("stealMode");
-        let team = sessionStorage.getItem("team");
-        let alreadyBuzzed = localStorage.getItem("buzzed");
-        const outs = getOutTeams();
+  const stateRef = doc(db, "gameData", "state");
+  const team = sessionStorage.getItem("team");
 
-        const canSteal = stealFrom && stealFrom !== team && !alreadyBuzzed && !outs.includes(team);
-        const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
+  // ✅ Real-time check of buzzer availability
+  onSnapshot(stateRef, async (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
 
-        if (canNormal || canSteal) {
-            document.getElementById("buzzerBtn").disabled = false;
-        } else {
-            document.getElementById("buzzerBtn").disabled = true;
-        }
-    }, 200);
+    const enable     = !!data.enableBuzzer;
+    const stealFrom  = data.stealMode || "";
+    const alreadyBuzzed = !!data.buzzed;
+    const outs       = await getOutTeams();
 
-    document.getElementById("buzzerBtn").onclick = () => {
-        let team = sessionStorage.getItem("team");
-        if (team) {
-            localStorage.setItem("buzzed", team);
-            document.getElementById("buzzerBtn").disabled = true;
-            document.getElementById("answerArea").style.display = "block";
-            playSound("buzzSound");
-        }
-    }
+    const canSteal  = stealFrom && stealFrom !== team && !alreadyBuzzed && !outs.includes(team);
+    const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
+
+    document.getElementById("buzzerBtn").disabled = !(canNormal || canSteal);
+  });
+
+  // ✅ When player presses buzzer
+  document.getElementById("buzzerBtn").onclick = async () => {
+    if (!team) return;
+
+    // set who buzzed in Firestore so all clients/admin see instantly
+    await updateDoc(stateRef, { buzzed: team })
+      .catch(async () => {
+        // create doc if it doesn't exist yet
+        await setDoc(stateRef, { buzzed: team });
+      });
+
+    document.getElementById("buzzerBtn").disabled = true;
+    document.getElementById("answerArea").style.display = "block";
+    playSound("buzzSound");
+  };
 }
 
+
 // ================= QUESTION BOARD =================
-function showBoard(level, btn) {
-    currentLevel = level;
-    renderBoard(level);
-    localStorage.setItem("enableBuzzer", "false");
+async function showBoard(level, btn) {
+  currentLevel = level;
+  renderBoard(level);
 
-    // button highlight
-    document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("selected"));
-    if (btn) btn.classList.add("selected");
+  // disable buzzer until admin starts round
+  const stateRef = doc(db, "gameData", "state");
+  await updateDoc(stateRef, { enableBuzzer: false }).catch(async () => {
+    await setDoc(stateRef, { enableBuzzer: false });
+  });
 
-    resetTurnState();
+  // button highlight
+  document.querySelectorAll(".level-btn").forEach((b) =>
+    b.classList.remove("selected")
+  );
+  if (btn) btn.classList.add("selected");
+
+  await resetTurnState();
 }
 
 function renderBoard(level) {
-    let container = document.getElementById("questionBox");
-    container.innerHTML = "";
-    container.classList.add("board");
+  let container = document.getElementById("questionBox");
+  container.innerHTML = "";
+  container.classList.add("board");
 
-    questions[level].forEach((q, idx) => {
-        let item = document.createElement("div");
-        item.className = "board-item";
-        item.dataset.index = idx;
-        item.innerText = (idx + 1);
+  questions[level].forEach((q, idx) => {
+    let item = document.createElement("div");
+    item.className = "board-item";
+    item.dataset.index = idx;
+    item.innerText = idx + 1;
 
-        item.onclick = () => revealQuestion(idx, q, item, level);
+    item.onclick = () => revealQuestion(idx, q, item, level);
 
-        container.appendChild(item);
-    });
+    container.appendChild(item);
+  });
 }
 
-function revealQuestion(index, question, element, level) {
-    if (element.classList.contains("revealed")) return;
+async function revealQuestion(index, question, element, level) {
+  if (element.classList.contains("revealed")) return;
 
-    if (level === "medium" && question.img) {
-        element.innerHTML = question.q + "<br><img src='" + question.img + "' style='width:150px;margin-top:5px;'>";
-    } else {
-        element.innerText = question.q;
-    }
+  if (level === "medium" && question.img) {
+    element.innerHTML =
+      question.q +
+      "<br><img src='" +
+      question.img +
+      "' style='width:150px;margin-top:5px;'>";
+  } else {
+    element.innerText = question.q;
+  }
 
-    element.classList.add("revealed");
+  element.classList.add("revealed");
 
-    localStorage.setItem("currentQuestion", question.q);
-    currentQIndex = index;
-    resetTurnState(); // reset per-question state when opening a fresh tile
+  const stateRef = doc(db, "gameData", "state");
+  await updateDoc(stateRef, {
+    currentQuestion: question.q
+  }).catch(async () => {
+    await setDoc(stateRef, { currentQuestion: question.q });
+  });
+
+  currentQIndex = index;
+  await resetTurnState(); // reset per-question state when opening a fresh tile
 }
 
 // Lock box after answered
 function lockQuestion(level, index) {
-    let container = document.getElementById("questionBox");
-    let items = container.querySelectorAll(".board-item");
-    if (items[index]) {
-        items[index].classList.add("revealed");
-        items[index].onclick = null;
-    }
+  let container = document.getElementById("questionBox");
+  let items = container.querySelectorAll(".board-item");
+  if (items[index]) {
+    items[index].classList.add("revealed");
+    items[index].onclick = null;
+  }
 }
-
-
 
 // ✅ Override handleTeamWrongOrTimeout para limit 1 steal
 const originalHandleWrong = handleTeamWrongOrTimeout;
-handleTeamWrongOrTimeout = function(team, reasonLabel = "WRONG") {
-    // call original to mark OUT
-    originalHandleWrong(team, reasonLabel);
+handleTeamWrongOrTimeout = async function (team, reasonLabel = "WRONG") {
+  // call original to mark OUT
+  await originalHandleWrong(team, reasonLabel);
 
-    const outs = getOutTeams();
-    if (outs.length >= 3) {
-        revealCorrectAnswerAndLock();
-    } else {
-        // only allow steal once
-        startStealMode(team);
-    }
+  const outs = await getOutTeams();
+  if (outs.length >= 3) {
+    revealCorrectAnswerAndLock();
+  } else {
+    // only allow steal once
+    startStealMode(team);
+  }
 };
 
 // ✅ Reset steal flag per new round/question
 const originalResetTurnState = resetTurnState;
-resetTurnState = function() {
-    stealUsed = false;
-    originalResetTurnState();
+resetTurnState = async function () {
+  stealUsed = false;
+  await originalResetTurnState();
 };
+
+
+// expose functions to global window for onclick usage
+window.startRound = startRound;
+window.resetGame = resetGame;
+window.showBoard = showBoard;
+window.revealQuestion = revealQuestion;
+window.selectTeam = selectTeam;
+window.submitAnswer = submitAnswer;
