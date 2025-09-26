@@ -654,3 +654,4 @@ window.showBoard = showBoard;
 window.revealQuestion = revealQuestion;
 window.selectTeam = selectTeam;
 window.submitAnswer = submitAnswer;
+
