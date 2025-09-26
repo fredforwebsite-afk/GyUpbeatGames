@@ -532,3 +532,13 @@ resetTurnState = function() {
 };
 
 
+// expose functions to global window for onclick usage
+window.startRound = startRound;
+window.resetGame = resetGame;
+window.showBoard = showBoard;
+window.revealQuestion = revealQuestion;
+window.selectTeam = selectTeam;
+window.submitAnswer = submitAnswer;
+
+
+
