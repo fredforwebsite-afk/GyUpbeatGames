@@ -679,6 +679,29 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
+document.addEventListener("DOMContentLoaded", () => {
+  // Start round
+  const startBtn = document.getElementById("startBtn");
+  if (startBtn) {
+    startBtn.addEventListener("click", startRound);
+  }
+
+  // Reset game
+  const resetBtn = document.getElementById("resetBtn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", resetGame);
+  }
+
+  // Question level buttons
+  document.querySelectorAll(".level-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const level = btn.dataset.level;
+      showBoard(level, btn);
+    });
+  });
+});
+
+
 // expose functions to global window for onclick usage
 window.startRound = startRound;
 window.resetGame = resetGame;
@@ -688,6 +711,7 @@ window.selectTeam = selectTeam;
 window.submitAnswer = submitAnswer;
 window.switchToAnswer = switchToAnswer;
 window.lockQuestion = lockQuestion;
+
 
 
 
