@@ -7,16 +7,6 @@
     <title>Admin Panel</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* Settings icon */
-        
-        #settingsIcon {
-            position: fixed;
-            top: 15px;
-            right: 20px;
-            font-size: 28px;
-            cursor: pointer;
-            z-index: 1000;
-        }
         /* Modal styles */
         
         .modal {
@@ -76,8 +66,6 @@
 </head>
 
 <body>
-    <!-- Settings Icon -->
-    <div id="settingsIcon" onclick="openSettingsModal()">⚙️</div>
 
     <div class="container">
         <h1>Admin Panel</h1>
@@ -137,20 +125,6 @@
         <button style="margin-top:20px;background:orange;" onclick="resetGame()">🔄 Reset Game</button>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal">
-        <div class="modal-content">
-            <h2>Game Settings</h2>
-            <label>Buzz Time (seconds):</label><br>
-            <input type="number" id="buzzTimeInput" min="3" value="10"><br>
-
-            <label>Answer Time (seconds):</label><br>
-            <input type="number" id="answerTimeInput" min="3" value="15"><br>
-
-            <button class="btn-save" onclick="saveSettings()">Save</button>
-            <button class="btn-close" onclick="closeSettingsModal()">Close</button>
-        </div>
-    </div>
 
     <!-- Sounds -->
     <audio id="buzzSound" src="sound/buzzSound.mp3"></audio>
@@ -166,6 +140,7 @@
 
 
     <script src="script.js"></script>
+
 </body>
 
 </html>
