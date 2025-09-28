@@ -519,21 +519,12 @@ async function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
     playSound("wrongSound");
     stopAllTimersAndSounds();
-
-    // ✅ Alert pa rin para sure admin makakita
     alert("No team answered correctly. Correct answer is: " + correct);
 
-    // ✅ Player-side submitted answer box
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
     }
 
-    // ✅ Admin-side reveal box
-    if (document.getElementById("revealAnswer")) {
-        document.getElementById("revealAnswer").innerText = "✔ Correct Answer: " + correct;
-    }
-
-    // Lock question at reset states
     lockQuestion(currentLevel, currentQIndex);
     stopAllTimersAndSounds();
     await setBuzzerState({
@@ -547,7 +538,6 @@ async function revealCorrectAnswerAndLock() {
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 }
-
 
 // single-use steal mode starter
 async function startStealMode(team) {
