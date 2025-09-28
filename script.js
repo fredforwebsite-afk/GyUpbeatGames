@@ -146,6 +146,25 @@ async function resetTurnState() {
     if (document.getElementById("stealNotice")) document.getElementById("stealNotice").innerText = "";
 }
 
+
+function stopAllTimersAndSounds() {
+    // stop timers
+    clearInterval(countdownInterval);
+    clearInterval(answerTimerInterval);
+    countdownInterval = null;
+    answerTimerInterval = null;
+
+    // stop all sounds
+    ["beepSound", "beepHighSound", "timesUpSound", "buzzSound", "correctSound", "wrongSound"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.pause();
+            el.currentTime = 0;
+        }
+    });
+}
+
+
 // ================= ADMIN FUNCTIONS =================
 let buzzerSnapshotCleanup = null;
 
@@ -198,6 +217,7 @@ function runTimer() {
             clearInterval(countdownInterval);
             setBuzzerState({ enableBuzzer: false }).catch(console.error);
             if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "⏳ No Buzz";
+            stopAllTimersAndSounds();
             playSound("timesUpSound");
             if (document.getElementById("stealNotice")) {
                 document.getElementById("stealNotice").innerHTML =
@@ -350,6 +370,7 @@ function startAnswerTimer(team) {
             clearInterval(answerTimerInterval);
             answerTimerInterval = null;
             if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "❌ No answer submitted";
+            stopAllTimersAndSounds();
             await handleTeamWrongOrTimeout(team, "TIME UP");
         }
     }, 1000);
@@ -365,6 +386,7 @@ async function evaluateAnswer(team, ans) {
 
     const correctAns = (questions[currentLevel][currentQIndex].a || "").trim().toLowerCase();
     if (ans.trim().toLowerCase() === correctAns) {
+        stopAllTimersAndSounds();
         playSound("correctSound");
         let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
         scores[team] = (scores[team] || 0) + points;
@@ -413,6 +435,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     }, { merge: true });
 
     if (outs.length >= 3) {
+        stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
     } else {
         // allow remaining teams to buzz (steal)
@@ -434,6 +457,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
 async function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
     playSound("wrongSound");
+    stopAllTimersAndSounds();
     alert("No team answered correctly. Correct answer is: " + correct);
 
     if (document.getElementById("submittedAnswer")) {
@@ -441,13 +465,14 @@ async function revealCorrectAnswerAndLock() {
     }
 
     lockQuestion(currentLevel, currentQIndex);
-
+    stopAllTimersAndSounds();
     await setBuzzerState({
         enableBuzzer: false,
         buzzed: "",
         answeringTeam: "",
         stealMode: false
     });
+    stopAllTimersAndSounds();
     await setOutTeams([]);
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
