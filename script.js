@@ -242,6 +242,11 @@ function runTimer() {
             }
             playSound("timesUpSound");
 
+            // 🛑 Hide the answer box on timeout
+            const area = document.getElementById("answerArea");
+            if (area) area.style.display = "none";
+
+
             // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
             getBuzzerState().then(state => {
                 const team = state.answeringTeam;
@@ -278,9 +283,22 @@ function switchToAnswer(team) {
     updateCircle(answerTime, "yellow", answerTime);
     if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
 
+    // 🟢 SHOW answer box only if ikaw yung answering team
+    let myTeam = sessionStorage.getItem("team");
+    const area = document.getElementById("answerArea");
+    if (area) {
+        if (myTeam === team) {
+            area.style.display = "block";
+        } else {
+            area.style.display = "none";
+        }
+    }
+
     // start answer countdown
     countdownInterval = setInterval(runTimer, 1000);
 }
+
+
 
 // 🎨 Update circle progress (SVG circle expected)
 function updateCircle(time, color, max) {
@@ -360,6 +378,7 @@ async function submitAnswer() {
         clearInterval(answerTimerInterval); // stop admin answer timer loop if running
     }
 }
+
 
 
 
@@ -456,6 +475,10 @@ async function evaluateAnswer(team, ans) {
 
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
+    // 🛑 Hide answer box for the team
+    const area = document.getElementById("answerArea");
+    if (area) area.style.display = "none";
+
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
@@ -601,19 +624,34 @@ function registerTeamBuzzerUI() {
         let enable = data.enableBuzzer;
         let stealMode = !!data.stealMode; // true/false only
         let alreadyBuzzed = data.buzzed;
+        let answeringTeam = data.answeringTeam;
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
+        // normal buzz rules
         const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
 
-        // steal: same rules, but only active if stealMode is true
+        // steal mode rules
         const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
+
+        // 🟢 SHOW answer box ONLY if ikaw ang answering team
+        const area = document.getElementById("answerArea");
+        if (area) {
+            if (answeringTeam === team) {
+                area.style.display = "block";
+                // auto-focus para ready na magtype
+                const input = document.getElementById("teamAnswer");
+                if (input) input.focus();
+            } else {
+                area.style.display = "none";
+            }
+        }
     });
 }
+
 
 
 // attach team buzzer click handler
@@ -633,10 +671,6 @@ if (document.getElementById("buzzerBtn")) {
 // ================= QUESTION BOARD =================
 async function showBoard(level, btn) {
     currentLevel = level;
-
-    let container = document.getElementById("questionBox");
-    if (container) container.style.display = "grid"; // show board kapag pinili na
-
     renderBoard(level);
     await setBuzzerState({ enableBuzzer: false });
 
@@ -645,7 +679,6 @@ async function showBoard(level, btn) {
 
     await resetTurnState();
 }
-
 
 function renderBoard(level) {
     let container = document.getElementById("questionBox");
@@ -682,7 +715,6 @@ async function revealQuestion(index, question, element, level) {
         level
     });
 
-
     currentQIndex = index;
     await resetTurnState();
 }
@@ -698,25 +730,9 @@ function lockQuestion(level, index) {
     }
 }
 
-// ================= SYNC CURRENT QUESTION =================
-function registerCurrentQuestionListener() {
-    onSnapshot(doc(db, "game", "currentQuestion"), (snap) => {
-        if (!snap.exists()) return;
-        const data = snap.data();
-
-        currentLevel = data.level;
-        currentQIndex = data.index;
-
-        // UI update (optional)
-        if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText =
-                "⏳ Waiting for answer (" + currentLevel.toUpperCase() + ")";
-        }
-    });
-}
-
-
 // ================= OVERRIDES / STARTUP =================
+// Original handleTeamWrong override behavior is inherent in the single handleTeamWrongOrTimeout implemented above.
+// Ensure listeners and state are initialized on load:
 window.addEventListener("load", async() => {
     await loadScores();
     updateScores();
@@ -732,7 +748,6 @@ window.addEventListener("load", async() => {
         stealMode: false
     });
 });
-
 
 
 // Unsubscribe listeners on unload
