@@ -359,23 +359,38 @@ async function submitAnswer() {
 
 // ================= ANSWER TIMER & EVALUATION =================
 function startAnswerTimer(team) {
-    // Switch to answer mode, start countdown handled by runTimer
-    clearInterval(countdownInterval);
-    mode = "answer";
-    timeLeft = answerTime;
+    // will show on admin UI
+    let sec = answerTime;
+    if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
 
-    updateCircle(answerTime, "yellow", answerTime);
-    if (document.getElementById("circleTime")) {
-        document.getElementById("circleTime").textContent = timeLeft;
-    }
-    if (document.getElementById("submittedAnswer")) {
-        document.getElementById("submittedAnswer").innerText = "⏳ " + timeLeft + "s left...";
-    }
+    clearInterval(answerTimerInterval);
+    answerTimerInterval = setInterval(async() => {
+        // Check answers doc for this team's submission
+        const snap = await getDoc(doc(db, "game", "answers"));
+        const data = snap.exists() ? snap.data() : {};
+        const ans = data[team] || "";
 
-    // start countdown loop (runTimer will handle timeout and call handleTeamWrongOrTimeout)
-    countdownInterval = setInterval(runTimer, 1000);
+        if (ans && ans.trim() !== "") {
+            // admin will evaluate via evaluateAnswer flow (answers snapshot handled below)
+            clearInterval(answerTimerInterval);
+            answerTimerInterval = null;
+            return;
+        }
+
+        sec--;
+        if (sec >= 0 && document.getElementById("submittedAnswer")) {
+            document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
+        }
+
+        if (sec < 0) {
+            clearInterval(answerTimerInterval);
+            answerTimerInterval = null;
+            if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "❌ No answer submitted";
+            stopAllTimersAndSounds();
+            await handleTeamWrongOrTimeout(team, "TIME UP");
+        }
+    }, 1000);
 }
-
 
 // central answer evaluation (called when answers doc changes)
 async function evaluateAnswer(team, ans) {
