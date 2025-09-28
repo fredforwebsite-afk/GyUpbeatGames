@@ -409,7 +409,7 @@ async function evaluateAnswer(team, ans) {
         await saveScores();
         updateScores();
         highlightScore(team);
-        alert(team + " is CORRECT! +" + points + " pts");
+        //alert(team + " is CORRECT! +" + points + " pts");
 
         // stop countdown & update UI
         clearInterval(countdownInterval);
@@ -519,12 +519,21 @@ async function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
     playSound("wrongSound");
     stopAllTimersAndSounds();
+
+    // ✅ Alert pa rin para sure admin makakita
     alert("No team answered correctly. Correct answer is: " + correct);
 
+    // ✅ Player-side submitted answer box
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
     }
 
+    // ✅ Admin-side reveal box
+    if (document.getElementById("revealAnswer")) {
+        document.getElementById("revealAnswer").innerText = "✔ Correct Answer: " + correct;
+    }
+
+    // Lock question at reset states
     lockQuestion(currentLevel, currentQIndex);
     stopAllTimersAndSounds();
     await setBuzzerState({
@@ -538,6 +547,7 @@ async function revealCorrectAnswerAndLock() {
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 }
+
 
 // single-use steal mode starter
 async function startStealMode(team) {
@@ -605,6 +615,10 @@ if (document.getElementById("buzzerBtn")) {
 // ================= QUESTION BOARD =================
 async function showBoard(level, btn) {
     currentLevel = level;
+
+    let container = document.getElementById("questionBox");
+    if (container) container.style.display = "grid"; // show board kapag pinili na
+
     renderBoard(level);
     await setBuzzerState({ enableBuzzer: false });
 
@@ -613,6 +627,7 @@ async function showBoard(level, btn) {
 
     await resetTurnState();
 }
+
 
 function renderBoard(level) {
     let container = document.getElementById("questionBox");
@@ -664,9 +679,8 @@ function lockQuestion(level, index) {
     }
 }
 
+
 // ================= OVERRIDES / STARTUP =================
-// Original handleTeamWrong override behavior is inherent in the single handleTeamWrongOrTimeout implemented above.
-// Ensure listeners and state are initialized on load:
 window.addEventListener("load", async() => {
     await loadScores();
     updateScores();
@@ -683,9 +697,10 @@ window.addEventListener("load", async() => {
         stealMode: false
     });
 
-    // initially render easy board (if questionBox exists)
-    if (document.getElementById("questionBox")) renderBoard("easy");
+    // ❌ REMOVE THIS PART:
+    // if (document.getElementById("questionBox")) renderBoard("easy");
 });
+
 
 // Unsubscribe listeners on unload
 window.addEventListener("beforeunload", () => {
