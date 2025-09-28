@@ -444,7 +444,8 @@ async function evaluateAnswer(team, ans) {
         lockQuestion(lvl, idx);
         await setBuzzerState({ buzzed: "" });
         await setDoc(doc(db, "game", "answers"), {
-            [team]: "" }, { merge: true });
+            [team]: ""
+        }, { merge: true });
         await setBuzzerState({ stealMode: false });
         await setOutTeams([]);
     }
@@ -460,6 +461,7 @@ async function evaluateAnswer(team, ans) {
 
 
 
+// ================= WRONG / TIMEOUT / STEAL =================
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (document.getElementById("firstBuzz")) {
@@ -479,27 +481,41 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     const allTeams = ["Zack", "Ryan", "Kyle"];
     const remaining = allTeams.filter(t => !outs.includes(t));
 
-    // 🛑 Condition 1: lahat ng 3 teams OUT → reveal answer
+    // 🛑 Case 1: lahat ng 3 teams OUT → reveal answer
     if (remaining.length === 0) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🟡 Case 2: isa na lang natira → FINAL CHANCE
+    // 🟡 Case 2: isa na lang natira → siya lang ang naka-enable buzzer
     if (remaining.length === 1) {
+        const lastTeam = remaining[0];
         await setBuzzerState({
-            enableBuzzer: true,
+            enableBuzzer: true, // siya lang ang pwede mag-buzz
             buzzed: "",
             answeringTeam: "",
             stealMode: true
         });
+
         if (document.getElementById("stealNotice")) {
             document.getElementById("stealNotice").innerText =
-                "🚨 FINAL CHANCE: " + remaining[0] + " must answer!";
+                "🚨 FINAL CHANCE: " + lastTeam + " must buzz to answer!";
         }
+
+        // reset countdown for STEAL buzz
+        clearInterval(countdownInterval);
+        mode = "buzz";
+        timeLeft = buzzTime;
+        if (document.getElementById("circleTime"))
+            document.getElementById("circleTime").textContent = timeLeft;
+        updateCircle(buzzTime, "lime", buzzTime);
+        countdownInterval = setInterval(runTimer, 1000);
+
+        return;
     }
-    // 🟢 Case 3: dalawa pa natitira → STEAL MODE
+
+    // 🟢 Case 3: dalawa pa natitira → STEAL MODE normal
     else if (remaining.length === 2) {
         await setBuzzerState({
             enableBuzzer: true,
@@ -513,7 +529,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         }
     }
 
-    // reset countdown for steal (buzz mode)
+    // reset countdown for STEAL buzz (2 remaining teams)
     clearInterval(countdownInterval);
     mode = "buzz";
     timeLeft = buzzTime;
@@ -522,6 +538,8 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     updateCircle(buzzTime, "lime", buzzTime);
     countdownInterval = setInterval(runTimer, 1000);
 }
+
+
 
 
 
