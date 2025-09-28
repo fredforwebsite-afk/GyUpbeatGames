@@ -242,30 +242,16 @@ function runTimer() {
             }
             playSound("timesUpSound");
 
-            // 🛑 Hide the answer box on timeout
-            const area = document.getElementById("answerArea");
-            if (area) area.style.display = "none";
-
-            // 🟢 FIX: Always sync currentLevel/currentQIndex before marking wrong/timeout
-            getDoc(doc(db, "game", "currentQuestion")).then(snap => {
-                if (snap.exists()) {
-                    const data = snap.data();
-                    currentLevel = data.level;
-                    currentQIndex = data.index;
+            // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
+            getBuzzerState().then(state => {
+                const team = state.answeringTeam;
+                if (team) {
+                    handleTeamWrongOrTimeout(team, "TIME UP").catch(console.error);
                 }
-
-                // Now safely handle timeout
-                getBuzzerState().then(state => {
-                    const team = state.answeringTeam;
-                    if (team) {
-                        handleTeamWrongOrTimeout(team, "TIME UP").catch(console.error);
-                    }
-                });
             });
         }
     }
 }
-
 
 
 // 🛑 If a team buzzes early
@@ -292,22 +278,9 @@ function switchToAnswer(team) {
     updateCircle(answerTime, "yellow", answerTime);
     if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
 
-    // 🟢 SHOW answer box only if ikaw yung answering team
-    let myTeam = sessionStorage.getItem("team");
-    const area = document.getElementById("answerArea");
-    if (area) {
-        if (myTeam === team) {
-            area.style.display = "block";
-        } else {
-            area.style.display = "none";
-        }
-    }
-
     // start answer countdown
     countdownInterval = setInterval(runTimer, 1000);
 }
-
-
 
 // 🎨 Update circle progress (SVG circle expected)
 function updateCircle(time, color, max) {
@@ -379,18 +352,10 @@ async function submitAnswer() {
             submittedAnswer: ans
         }, { merge: true });
 
-        // 🛑 Auto-hide input box after submit
-        if (document.getElementById("answerArea")) {
-            document.getElementById("answerArea").style.display = "none";
-        }
-
-        // optional: clear input field
-        if (ansEl) ansEl.value = "";
-
-        clearInterval(answerTimerInterval);
+        if (document.getElementById("answerArea")) document.getElementById("answerArea").style.display = "none";
+        clearInterval(answerTimerInterval); // stop admin answer timer loop if running
     }
 }
-
 
 // ================= ANSWER TIMER & EVALUATION =================
 function startAnswerTimer(team) {
@@ -428,51 +393,51 @@ function startAnswerTimer(team) {
 }
 
 // central answer evaluation (called when answers doc changes)
-async function evaluateAnswer(givenAnswer) {
-    try {
-        // 🟢 Always sync from Firestore first
-        const snap = await getDoc(doc(db, "game", "currentQuestion"));
-        if (snap.exists()) {
-            const data = snap.data();
-            currentLevel = data.level;
-            currentQIndex = data.index;
+async function evaluateAnswer(team, ans) {
+    if (!team || !ans) return;
+
+    if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "📝 " + ans;
+    clearInterval(answerTimerInterval);
+    answerTimerInterval = null;
+
+    const correctAns = (questions[currentLevel][currentQIndex].a || "").trim().toLowerCase();
+    if (ans.trim().toLowerCase() === correctAns) {
+        stopAllTimersAndSounds();
+        playSound("correctSound");
+        let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
+        scores[team] = (scores[team] || 0) + points;
+        await saveScores();
+        updateScores();
+        highlightScore(team);
+        //alert(team + " is CORRECT! +" + points + " pts");
+
+        // stop countdown & update UI
+        clearInterval(countdownInterval);
+        timeLeft = 0;
+        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "0";
+        updateCircle(0, "lime", answerTime);
+
+        if (document.getElementById("submittedAnswer")) {
+            document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
         }
 
-        const q = questions[currentLevel][currentQIndex];
-        const correct = q.a.toLowerCase().trim();
-        const playerAns = (givenAnswer || "").toLowerCase().trim();
-
-        if (playerAns === correct) {
-            // ✅ Correct answer
-            playSound("correctSound");
-            showPopup(`${correct} is correct!`);
-            await awardPointToAnsweringTeam();
-
-        } else {
-            // ❌ Wrong answer
-            playSound("wrongSound");
-            showPopup(
-                `No team answered correctly. Correct answer is: ${q.a}`
-            );
-
-            // handle wrong logic (steal mode, etc.)
-            const state = await getBuzzerState();
-            if (state.answeringTeam) {
-                await handleTeamWrongOrTimeout(state.answeringTeam, "WRONG");
-            }
-        }
-    } catch (err) {
-        console.error("Error in evaluateAnswer:", err);
+        // lock question and cleanup
+        lockQuestion(currentLevel, currentQIndex);
+        await setBuzzerState({ buzzed: "" });
+        await setDoc(doc(db, "game", "answers"), {
+            [team]: ""
+        }, { merge: true });
+        await setBuzzerState({ stealMode: false });
+        await setOutTeams([]);
+    } else {
+        // wrong
+        playSound("wrongSound");
+        await handleTeamWrongOrTimeout(team, "WRONG");
     }
 }
 
-
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
-    // 🛑 Hide answer box for the team
-    const area = document.getElementById("answerArea");
-    if (area) area.style.display = "none";
-
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
@@ -618,34 +583,19 @@ function registerTeamBuzzerUI() {
         let enable = data.enableBuzzer;
         let stealMode = !!data.stealMode; // true/false only
         let alreadyBuzzed = data.buzzed;
-        let answeringTeam = data.answeringTeam;
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz rules
+        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
         const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
 
-        // steal mode rules
+        // steal: same rules, but only active if stealMode is true
         const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
-
-        // 🟢 SHOW answer box ONLY if ikaw ang answering team
-        const area = document.getElementById("answerArea");
-        if (area) {
-            if (answeringTeam === team) {
-                area.style.display = "block";
-                // auto-focus para ready na magtype
-                const input = document.getElementById("teamAnswer");
-                if (input) input.focus();
-            } else {
-                area.style.display = "none";
-            }
-        }
     });
 }
-
 
 
 // attach team buzzer click handler
@@ -691,6 +641,7 @@ function renderBoard(level) {
         container.appendChild(item);
     });
 }
+
 async function revealQuestion(index, question, element, level) {
     if (element.classList.contains("revealed")) return;
 
@@ -708,13 +659,9 @@ async function revealQuestion(index, question, element, level) {
         level
     });
 
-    // ✅ Important fix
-    currentLevel = level;
     currentQIndex = index;
-
     await resetTurnState();
 }
-
 
 // Lock box after answered (UI only)
 function lockQuestion(level, index) {
