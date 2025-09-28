@@ -246,17 +246,26 @@ function runTimer() {
             const area = document.getElementById("answerArea");
             if (area) area.style.display = "none";
 
-
-            // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
-            getBuzzerState().then(state => {
-                const team = state.answeringTeam;
-                if (team) {
-                    handleTeamWrongOrTimeout(team, "TIME UP").catch(console.error);
+            // 🟢 FIX: Always sync currentLevel/currentQIndex before marking wrong/timeout
+            getDoc(doc(db, "game", "currentQuestion")).then(snap => {
+                if (snap.exists()) {
+                    const data = snap.data();
+                    currentLevel = data.level;
+                    currentQIndex = data.index;
                 }
+
+                // Now safely handle timeout
+                getBuzzerState().then(state => {
+                    const team = state.answeringTeam;
+                    if (team) {
+                        handleTeamWrongOrTimeout(team, "TIME UP").catch(console.error);
+                    }
+                });
             });
         }
     }
 }
+
 
 
 // 🛑 If a team buzzes early
@@ -419,48 +428,44 @@ function startAnswerTimer(team) {
 }
 
 // central answer evaluation (called when answers doc changes)
-async function evaluateAnswer(team, ans) {
-    if (!team || !ans) return;
-
-    if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "📝 " + ans;
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = null;
-
-    const correctAns = (questions[currentLevel][currentQIndex].a || "").trim().toLowerCase();
-    if (ans.trim().toLowerCase() === correctAns) {
-        stopAllTimersAndSounds();
-        playSound("correctSound");
-        let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
-        scores[team] = (scores[team] || 0) + points;
-        await saveScores();
-        updateScores();
-        highlightScore(team);
-        alert(team + " is CORRECT! +" + points + " pts");
-
-        // stop countdown & update UI
-        clearInterval(countdownInterval);
-        timeLeft = 0;
-        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "0";
-        updateCircle(0, "lime", answerTime);
-
-        if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
+async function evaluateAnswer(givenAnswer) {
+    try {
+        // 🟢 Always sync from Firestore first
+        const snap = await getDoc(doc(db, "game", "currentQuestion"));
+        if (snap.exists()) {
+            const data = snap.data();
+            currentLevel = data.level;
+            currentQIndex = data.index;
         }
 
-        // lock question and cleanup
-        lockQuestion(currentLevel, currentQIndex);
-        await setBuzzerState({ buzzed: "" });
-        await setDoc(doc(db, "game", "answers"), {
-            [team]: ""
-        }, { merge: true });
-        await setBuzzerState({ stealMode: false });
-        await setOutTeams([]);
-    } else {
-        // wrong
-        playSound("wrongSound");
-        await handleTeamWrongOrTimeout(team, "WRONG");
+        const q = questions[currentLevel][currentQIndex];
+        const correct = q.a.toLowerCase().trim();
+        const playerAns = (givenAnswer || "").toLowerCase().trim();
+
+        if (playerAns === correct) {
+            // ✅ Correct answer
+            playSound("correctSound");
+            showPopup(`${correct} is correct!`);
+            await awardPointToAnsweringTeam();
+
+        } else {
+            // ❌ Wrong answer
+            playSound("wrongSound");
+            showPopup(
+                `No team answered correctly. Correct answer is: ${q.a}`
+            );
+
+            // handle wrong logic (steal mode, etc.)
+            const state = await getBuzzerState();
+            if (state.answeringTeam) {
+                await handleTeamWrongOrTimeout(state.answeringTeam, "WRONG");
+            }
+        }
+    } catch (err) {
+        console.error("Error in evaluateAnswer:", err);
     }
 }
+
 
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
@@ -686,7 +691,6 @@ function renderBoard(level) {
         container.appendChild(item);
     });
 }
-
 async function revealQuestion(index, question, element, level) {
     if (element.classList.contains("revealed")) return;
 
@@ -704,9 +708,13 @@ async function revealQuestion(index, question, element, level) {
         level
     });
 
+    // ✅ Important fix
+    currentLevel = level;
     currentQIndex = index;
+
     await resetTurnState();
 }
+
 
 // Lock box after answered (UI only)
 function lockQuestion(level, index) {
