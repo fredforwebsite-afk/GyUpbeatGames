@@ -8,15 +8,13 @@
 </head>
 
 <body>
-    
-<!-- Select Team -->
-<div class="container" id="teamSelect">
-  <h1>Select Your Team</h1>
-  <button class="team-choice" data-team="Zack">Team Zack</button>
-  <button class="team-choice" data-team="Ryan">Team Ryan</button>
-  <button class="team-choice" data-team="Kyle">Team Kyle</button>
-</div>
-
+    <!-- Select Team -->
+    <div class="container" id="teamSelect">
+        <h1>Select Your Team</h1>
+        <button class="team-choice" onclick="selectTeam('Zack')">Team Zack</button>
+        <button class="team-choice" onclick="selectTeam('Ryan')">Team Ryan</button>
+        <button class="team-choice" onclick="selectTeam('Kyle')">Team Kyle</button>
+    </div>
 
     <!-- Buzzer Area -->
     <div class="container" id="buzzerArea" style="display:none;">
@@ -24,16 +22,15 @@
         <button id="buzzerBtn" class="buzzer" disabled>Press Buzzer!</button>
     </div>
 
-<!-- Answer Box -->
-<div class="container" id="answerArea" style="display:none;">
-  <h2>Type your answer:</h2>
-  <input type="text" id="teamAnswer" placeholder="Your final answer...">
-  <button id="submitAnswerBtn">Submit</button>
-  <div id="answerTime" style="font-size:22px;margin-top:10px;color:lightgreen;">
-    Answer Time: 0
-  </div>
-</div>
-
+    <!-- Answer Box -->
+    <div class="container" id="answerArea" style="display:none;">
+        <h2>Type your answer:</h2>
+        <input type="text" id="teamAnswer" placeholder="Your final answer...">
+        <button onclick="submitAnswer()">Submit</button>
+        <div id="answerTime" style="font-size:22px;margin-top:10px;color:lightgreen;">
+            Answer Time: 0
+        </div>
+    </div>
 
     <!-- Sounds -->
     <audio id="buzzSound" src="sound/buzzSound.mp3"></audio>
@@ -42,12 +39,6 @@
 
     <script type="module" src="script.js"></script>
 
-
 </body>
 
 </html>
-
-
-
-
-
