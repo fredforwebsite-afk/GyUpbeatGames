@@ -242,6 +242,11 @@ function runTimer() {
             }
             playSound("timesUpSound");
 
+            // 🛑 Hide the answer box on timeout
+            const area = document.getElementById("answerArea");
+            if (area) area.style.display = "none";
+
+
             // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
             getBuzzerState().then(state => {
                 const team = state.answeringTeam;
@@ -459,6 +464,10 @@ async function evaluateAnswer(team, ans) {
 
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
+    // 🛑 Hide answer box for the team
+    const area = document.getElementById("answerArea");
+    if (area) area.style.display = "none";
+
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
@@ -604,19 +613,34 @@ function registerTeamBuzzerUI() {
         let enable = data.enableBuzzer;
         let stealMode = !!data.stealMode; // true/false only
         let alreadyBuzzed = data.buzzed;
+        let answeringTeam = data.answeringTeam;
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
+        // normal buzz rules
         const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
 
-        // steal: same rules, but only active if stealMode is true
+        // steal mode rules
         const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
+
+        // 🟢 SHOW answer box ONLY if ikaw ang answering team
+        const area = document.getElementById("answerArea");
+        if (area) {
+            if (answeringTeam === team) {
+                area.style.display = "block";
+                // auto-focus para ready na magtype
+                const input = document.getElementById("teamAnswer");
+                if (input) input.focus();
+            } else {
+                area.style.display = "none";
+            }
+        }
     });
 }
+
 
 
 // attach team buzzer click handler
