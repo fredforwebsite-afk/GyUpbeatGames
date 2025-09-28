@@ -349,13 +349,19 @@ async function submitAnswer() {
     if (team && ans) {
         await setDoc(doc(db, "game", "answers"), {
             [team]: ans,
-            submittedAnswer: ans
+            submittedAnswer: ans,
+            level: currentLevel, // 🟢 save current level
+            index: currentQIndex // 🟢 save current index
         }, { merge: true });
 
-        if (document.getElementById("answerArea")) document.getElementById("answerArea").style.display = "none";
+        if (document.getElementById("answerArea")) {
+            document.getElementById("answerArea").style.display = "none";
+        }
         clearInterval(answerTimerInterval); // stop admin answer timer loop if running
     }
 }
+
+
 
 // ================= ANSWER TIMER & EVALUATION =================
 function startAnswerTimer(team) {
@@ -396,15 +402,23 @@ function startAnswerTimer(team) {
 async function evaluateAnswer(team, ans) {
     if (!team || !ans) return;
 
-    if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "📝 " + ans;
+    if (document.getElementById("submittedAnswer")) {
+        document.getElementById("submittedAnswer").innerText = "📝 " + ans;
+    }
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 
-    const correctAns = (questions[currentLevel][currentQIndex].a || "").trim().toLowerCase();
+    // 🟢 Kunin level at index mula Firestore answers kung meron
+    const snap = await getDoc(doc(db, "game", "answers"));
+    const answersData = snap.exists() ? snap.data() : {};
+    const lvl = answersData.level || currentLevel;
+    const idx = answersData.index ?? currentQIndex;
+
+    const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
     if (ans.trim().toLowerCase() === correctAns) {
         stopAllTimersAndSounds();
         playSound("correctSound");
-        let points = (currentLevel === "easy") ? 100 : (currentLevel === "medium") ? 300 : 500;
+        let points = (lvl === "easy") ? 100 : (lvl === "medium") ? 300 : 500;
         scores[team] = (scores[team] || 0) + points;
         await saveScores();
         updateScores();
@@ -414,15 +428,18 @@ async function evaluateAnswer(team, ans) {
         // stop countdown & update UI
         clearInterval(countdownInterval);
         timeLeft = 0;
-        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "0";
+        if (document.getElementById("circleTime")) {
+            document.getElementById("circleTime").textContent = "0";
+        }
         updateCircle(0, "lime", answerTime);
 
         if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = "✅ Correct: " + questions[currentLevel][currentQIndex].a;
+            document.getElementById("submittedAnswer").innerText =
+                "✅ Correct: " + questions[lvl][idx].a;
         }
 
         // lock question and cleanup
-        lockQuestion(currentLevel, currentQIndex);
+        lockQuestion(lvl, idx);
         await setBuzzerState({ buzzed: "" });
         await setDoc(doc(db, "game", "answers"), {
             [team]: ""
@@ -435,6 +452,7 @@ async function evaluateAnswer(team, ans) {
         await handleTeamWrongOrTimeout(team, "WRONG");
     }
 }
+
 
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
