@@ -437,8 +437,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (outs.length >= 3) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
-    } 
-    else {
+    } else {
         // allow remaining teams to buzz (steal)
         await setBuzzerState({ enableBuzzer: true });
         if (document.getElementById("stealNotice")) {
