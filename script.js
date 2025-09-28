@@ -664,6 +664,7 @@ async function revealQuestion(index, question, element, level) {
         level
     });
 
+
     currentQIndex = index;
     await resetTurnState();
 }
@@ -679,27 +680,41 @@ function lockQuestion(level, index) {
     }
 }
 
+// ================= SYNC CURRENT QUESTION =================
+function registerCurrentQuestionListener() {
+    onSnapshot(doc(db, "game", "currentQuestion"), (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+
+        currentLevel = data.level;
+        currentQIndex = data.index;
+
+        // UI update (optional)
+        if (document.getElementById("submittedAnswer")) {
+            document.getElementById("submittedAnswer").innerText =
+                "⏳ Waiting for answer (" + currentLevel.toUpperCase() + ")";
+        }
+    });
+}
+
 
 // ================= OVERRIDES / STARTUP =================
 window.addEventListener("load", async() => {
     await loadScores();
     updateScores();
 
-    // register answer listener and team UI listener
     registerAnswersListener();
     registerTeamBuzzerUI();
+    registerCurrentQuestionListener(); // ✅ ADD THIS
 
-    // make sure buzzer doc exists
     await setBuzzerState({
         enableBuzzer: false,
         buzzed: "",
         answeringTeam: "",
         stealMode: false
     });
-
-    // ❌ REMOVE THIS PART:
-    // if (document.getElementById("questionBox")) renderBoard("easy");
 });
+
 
 
 // Unsubscribe listeners on unload
