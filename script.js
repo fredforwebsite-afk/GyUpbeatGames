@@ -422,7 +422,8 @@ async function evaluateAnswer(team, ans) {
 
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
-    if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
+    if (document.getElementById("firstBuzz"))
+        document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
 
     const outs = await getOutTeams();
     if (!outs.includes(team)) outs.push(team);
@@ -431,28 +432,54 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     // clear the buzz and that team's answer
     await setBuzzerState({ buzzed: "" });
     await setDoc(doc(db, "game", "answers"), {
-        [team]: ""
-    }, { merge: true });
+        [team]: "" }, { merge: true });
 
-    if (outs.length >= 3) {
+    const allTeams = ["Zack", "Ryan", "Kyle"];
+    const remaining = allTeams.filter(t => !outs.includes(t));
+
+    if (remaining.length === 0) {
+        // 😵 all teams are OUT → reveal correct answer
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
-    } else {
-        // allow remaining teams to buzz (steal)
-        await setBuzzerState({ enableBuzzer: true });
+    } else if (remaining.length === 1) {
+        // 🟡 only one team left → restrict buzzer to them
+        await setBuzzerState({
+            enableBuzzer: true,
+            stealMode: true
+        });
         if (document.getElementById("stealNotice")) {
-            document.getElementById("stealNotice").innerText = "🚨 STEAL MODE: " + team + " is OUT! Remaining teams may buzz.";
+            document.getElementById("stealNotice").innerText =
+                "🚨 FINAL CHANCE: " + remaining[0] + " must answer!";
+        }
+
+        // reset countdown for last chance
+        clearInterval(countdownInterval);
+        mode = "buzz";
+        timeLeft = buzzTime;
+        if (document.getElementById("circleTime"))
+            document.getElementById("circleTime").textContent = timeLeft;
+        updateCircle(buzzTime, "lime", buzzTime);
+        countdownInterval = setInterval(runTimer, 1000);
+
+    } else {
+        // 🟢 more than one team left → allow any remaining to buzz
+        await setBuzzerState({ enableBuzzer: true, stealMode: true });
+        if (document.getElementById("stealNotice")) {
+            document.getElementById("stealNotice").innerText =
+                "🚨 STEAL MODE: " + team + " is OUT! Remaining teams may buzz.";
         }
 
         // reset countdown for steal (buzz mode)
         clearInterval(countdownInterval);
         mode = "buzz";
         timeLeft = buzzTime;
-        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("circleTime"))
+            document.getElementById("circleTime").textContent = timeLeft;
         updateCircle(buzzTime, "lime", buzzTime);
         countdownInterval = setInterval(runTimer, 1000);
     }
 }
+
 
 async function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
