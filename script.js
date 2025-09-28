@@ -409,7 +409,7 @@ async function evaluateAnswer(team, ans) {
         await saveScores();
         updateScores();
         highlightScore(team);
-        alert(team + " is CORRECT! +" + points + " pts");
+        //alert(team + " is CORRECT! +" + points + " pts");
 
         // stop countdown & update UI
         clearInterval(countdownInterval);
@@ -519,12 +519,21 @@ async function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
     playSound("wrongSound");
     stopAllTimersAndSounds();
+
+    // ✅ Alert pa rin para sure admin makakita
     alert("No team answered correctly. Correct answer is: " + correct);
 
+    // ✅ Player-side submitted answer box
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
     }
 
+    // ✅ Admin-side reveal box
+    if (document.getElementById("revealAnswer")) {
+        document.getElementById("revealAnswer").innerText = "✔ Correct Answer: " + correct;
+    }
+
+    // Lock question at reset states
     lockQuestion(currentLevel, currentQIndex);
     stopAllTimersAndSounds();
     await setBuzzerState({
@@ -538,6 +547,7 @@ async function revealCorrectAnswerAndLock() {
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 }
+
 
 // single-use steal mode starter
 async function startStealMode(team) {
@@ -573,6 +583,7 @@ function registerTeamBuzzerUI() {
         let enable = data.enableBuzzer;
         let stealMode = !!data.stealMode; // true/false only
         let alreadyBuzzed = data.buzzed;
+        let answeringTeam = data.answeringTeam || "";
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
@@ -584,8 +595,31 @@ function registerTeamBuzzerUI() {
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
+
+        // 🟢 NEW: control answer area
+        const area = document.getElementById("answerArea");
+        const ansInput = document.getElementById("teamAnswer");
+
+        if (!enable) {
+            // ❌ buzzer disabled → hide/disable answer box for everyone
+            if (area) area.style.display = "none";
+            if (ansInput) ansInput.disabled = true;
+        } else {
+            // ✅ buzzer enabled
+            if (area) {
+                // show answer area only if this team is the answeringTeam
+                if (team === answeringTeam) {
+                    area.style.display = "block";
+                    if (ansInput) ansInput.disabled = false;
+                } else {
+                    area.style.display = "none";
+                    if (ansInput) ansInput.disabled = true;
+                }
+            }
+        }
     });
 }
+
 
 
 // attach team buzzer click handler
