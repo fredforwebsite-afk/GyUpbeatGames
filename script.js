@@ -242,11 +242,6 @@ function runTimer() {
             }
             playSound("timesUpSound");
 
-            // 🛑 Hide the answer box on timeout
-            const area = document.getElementById("answerArea");
-            if (area) area.style.display = "none";
-
-
             // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
             getBuzzerState().then(state => {
                 const team = state.answeringTeam;
@@ -283,22 +278,9 @@ function switchToAnswer(team) {
     updateCircle(answerTime, "yellow", answerTime);
     if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
 
-    // 🟢 SHOW answer box only if ikaw yung answering team
-    let myTeam = sessionStorage.getItem("team");
-    const area = document.getElementById("answerArea");
-    if (area) {
-        if (myTeam === team) {
-            area.style.display = "block";
-        } else {
-            area.style.display = "none";
-        }
-    }
-
     // start answer countdown
     countdownInterval = setInterval(runTimer, 1000);
 }
-
-
 
 // 🎨 Update circle progress (SVG circle expected)
 function updateCircle(time, color, max) {
@@ -381,7 +363,6 @@ async function submitAnswer() {
 
 
 
-
 // ================= ANSWER TIMER & EVALUATION =================
 function startAnswerTimer(team) {
     // will show on admin UI
@@ -427,7 +408,6 @@ async function evaluateAnswer(team, ans) {
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 
-    // 🟢 Kunin level at index mula Firestore answers kung meron
     const snap = await getDoc(doc(db, "game", "answers"));
     const answersData = snap.exists() ? snap.data() : {};
     const lvl = answersData.level || currentLevel;
@@ -442,9 +422,7 @@ async function evaluateAnswer(team, ans) {
         await saveScores();
         updateScores();
         highlightScore(team);
-        //alert(team + " is CORRECT! +" + points + " pts");
 
-        // stop countdown & update UI
         clearInterval(countdownInterval);
         timeLeft = 0;
         if (document.getElementById("circleTime")) {
@@ -452,9 +430,9 @@ async function evaluateAnswer(team, ans) {
         }
         updateCircle(0, "lime", answerTime);
 
+        // ✅ Wag munang i-reveal yung sagot
         if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText =
-                "✅ Correct: " + questions[lvl][idx].a;
+            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT!";
         }
 
         // lock question and cleanup
@@ -466,19 +444,16 @@ async function evaluateAnswer(team, ans) {
         await setBuzzerState({ stealMode: false });
         await setOutTeams([]);
     } else {
-        // wrong
+        // ❌ Wrong pero wag reveal answer
         playSound("wrongSound");
         await handleTeamWrongOrTimeout(team, "WRONG");
     }
 }
 
 
+
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
-    // 🛑 Hide answer box for the team
-    const area = document.getElementById("answerArea");
-    if (area) area.style.display = "none";
-
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
@@ -487,65 +462,48 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (!outs.includes(team)) outs.push(team);
     await setOutTeams(outs);
 
-    // clear the buzz and that team's answer
     await setBuzzerState({ buzzed: "" });
     await setDoc(doc(db, "game", "answers"), {
-        [team]: ""
-    }, { merge: true });
+        [team]: "" }, { merge: true });
 
     const allTeams = ["Zack", "Ryan", "Kyle"];
     const remaining = allTeams.filter(t => !outs.includes(t));
+    const buzzerState = await getBuzzerState();
 
-    // 🛑 Condition 1: lahat ng 3 teams OUT → reveal answer
-    if (outs.length >= 3) {
+    // 🛑 Condition 1: lahat ng teams mali / time up
+    if (remaining.length === 0) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🛑 Condition 2: steal mode, last team na nag-time up → reveal answer
-    const buzzerState = await getBuzzerState();
+    // 🛑 Condition 2: Steal mode, lahat ng natira hindi nag-buzz
     if (buzzerState.stealMode && remaining.length === 0) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🛑 Condition 3: dalawa na lang ang natira pero parehong di nakapag-buzz → reveal answer
-    if (remaining.length === 2 && buzzerState.enableBuzzer === false) {
+    // 🛑 Condition 3: 2 teams natira pero parehong hindi nag-buzz, tapos 1 team na lang matitira
+    if (remaining.length === 1 && buzzerState.enableBuzzer === false) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // Otherwise, tuloy steal mode
-    if (remaining.length === 1) {
-        // 🟡 Only one team left → buzzer just for them
-        await setBuzzerState({
-            enableBuzzer: true,
-            buzzed: "",
-            answeringTeam: "",
-            stealMode: true
-        });
-        if (document.getElementById("stealNotice")) {
-            document.getElementById("stealNotice").innerText =
-                "🚨 FINAL CHANCE: " + remaining[0] + " must answer!";
-        }
-    } else {
-        // 🟢 More than one team left → open steal for them
-        await setBuzzerState({
-            enableBuzzer: true,
-            buzzed: "",
-            answeringTeam: "",
-            stealMode: true
-        });
-        if (document.getElementById("stealNotice")) {
-            document.getElementById("stealNotice").innerText =
-                "🚨 STEAL MODE: " + team + " is OUT! Remaining teams may buzz.";
-        }
+    // Otherwise, open steal mode para sa remaining teams
+    await setBuzzerState({
+        enableBuzzer: true,
+        buzzed: "",
+        answeringTeam: "",
+        stealMode: true
+    });
+
+    if (document.getElementById("stealNotice")) {
+        document.getElementById("stealNotice").innerText =
+            "🚨 STEAL MODE: " + team + " is OUT! Remaining: " + remaining.join(", ");
     }
 
-    // reset countdown for steal (buzz mode)
     clearInterval(countdownInterval);
     mode = "buzz";
     timeLeft = buzzTime;
@@ -554,6 +512,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     updateCircle(buzzTime, "lime", buzzTime);
     countdownInterval = setInterval(runTimer, 1000);
 }
+
 
 
 async function revealCorrectAnswerAndLock() {
@@ -624,34 +583,19 @@ function registerTeamBuzzerUI() {
         let enable = data.enableBuzzer;
         let stealMode = !!data.stealMode; // true/false only
         let alreadyBuzzed = data.buzzed;
-        let answeringTeam = data.answeringTeam;
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz rules
+        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
         const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
 
-        // steal mode rules
+        // steal: same rules, but only active if stealMode is true
         const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
-
-        // 🟢 SHOW answer box ONLY if ikaw ang answering team
-        const area = document.getElementById("answerArea");
-        if (area) {
-            if (answeringTeam === team) {
-                area.style.display = "block";
-                // auto-focus para ready na magtype
-                const input = document.getElementById("teamAnswer");
-                if (input) input.focus();
-            } else {
-                area.style.display = "none";
-            }
-        }
     });
 }
-
 
 
 // attach team buzzer click handler
@@ -671,6 +615,10 @@ if (document.getElementById("buzzerBtn")) {
 // ================= QUESTION BOARD =================
 async function showBoard(level, btn) {
     currentLevel = level;
+
+    let container = document.getElementById("questionBox");
+    if (container) container.style.display = "grid"; // show board kapag pinili na
+
     renderBoard(level);
     await setBuzzerState({ enableBuzzer: false });
 
@@ -679,6 +627,7 @@ async function showBoard(level, btn) {
 
     await resetTurnState();
 }
+
 
 function renderBoard(level) {
     let container = document.getElementById("questionBox");
@@ -715,6 +664,7 @@ async function revealQuestion(index, question, element, level) {
         level
     });
 
+
     currentQIndex = index;
     await resetTurnState();
 }
@@ -730,9 +680,25 @@ function lockQuestion(level, index) {
     }
 }
 
+// ================= SYNC CURRENT QUESTION =================
+function registerCurrentQuestionListener() {
+    onSnapshot(doc(db, "game", "currentQuestion"), (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
+
+        currentLevel = data.level;
+        currentQIndex = data.index;
+
+        // UI update (optional)
+        if (document.getElementById("submittedAnswer")) {
+            document.getElementById("submittedAnswer").innerText =
+                "⏳ Waiting for answer (" + currentLevel.toUpperCase() + ")";
+        }
+    });
+}
+
+
 // ================= OVERRIDES / STARTUP =================
-// Original handleTeamWrong override behavior is inherent in the single handleTeamWrongOrTimeout implemented above.
-// Ensure listeners and state are initialized on load:
 window.addEventListener("load", async() => {
     await loadScores();
     updateScores();
@@ -748,6 +714,7 @@ window.addEventListener("load", async() => {
         stealMode: false
     });
 });
+
 
 
 // Unsubscribe listeners on unload
