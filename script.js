@@ -445,6 +445,8 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
             // 🟡 Only one team left → buzzer just for them
             await setBuzzerState({
                 enableBuzzer: true,
+                buzzed: "",
+                answeringTeam: "",
                 stealMode: true
             });
             if (document.getElementById("stealNotice")) {
@@ -455,6 +457,8 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
             // 🟢 More than one team left → open steal for them
             await setBuzzerState({
                 enableBuzzer: true,
+                buzzed: "",
+                answeringTeam: "",
                 stealMode: true
             });
             if (document.getElementById("stealNotice")) {
