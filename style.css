@@ -340,9 +340,5 @@ circle.progress {
     cursor: pointer;
 }
 
-#questionBox {
-    display: none;
-    /* hide by default */
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-}
+
+
