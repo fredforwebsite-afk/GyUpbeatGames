@@ -414,15 +414,20 @@ async function evaluateAnswer(team, ans) {
     const idx = answersData.index ?? currentQIndex;
 
     const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
+
+    // ✅ Case 1: Correct answer
     if (ans.trim().toLowerCase() === correctAns) {
         stopAllTimersAndSounds();
         playSound("correctSound");
+
         let points = (lvl === "easy") ? 100 : (lvl === "medium") ? 300 : 500;
         scores[team] = (scores[team] || 0) + points;
+
         await saveScores();
         updateScores();
         highlightScore(team);
 
+        // stop countdown
         clearInterval(countdownInterval);
         timeLeft = 0;
         if (document.getElementById("circleTime")) {
@@ -430,7 +435,7 @@ async function evaluateAnswer(team, ans) {
         }
         updateCircle(0, "lime", answerTime);
 
-        // ✅ Wag munang i-reveal yung sagot
+        // mark lang as correct (no reveal)
         if (document.getElementById("submittedAnswer")) {
             document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT!";
         }
@@ -439,16 +444,19 @@ async function evaluateAnswer(team, ans) {
         lockQuestion(lvl, idx);
         await setBuzzerState({ buzzed: "" });
         await setDoc(doc(db, "game", "answers"), {
-            [team]: ""
-        }, { merge: true });
+            [team]: "" }, { merge: true });
         await setBuzzerState({ stealMode: false });
         await setOutTeams([]);
-    } else {
-        // ❌ Wrong pero wag reveal answer
+    }
+
+    // ❌ Case 2: Wrong answer
+    else {
         playSound("wrongSound");
         await handleTeamWrongOrTimeout(team, "WRONG");
+        // ❌ wag mag-reveal ng tamang sagot dito
     }
 }
+
 
 
 
@@ -462,48 +470,50 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (!outs.includes(team)) outs.push(team);
     await setOutTeams(outs);
 
+    // clear the buzz and that team's answer
     await setBuzzerState({ buzzed: "" });
     await setDoc(doc(db, "game", "answers"), {
-        [team]: "" }, { merge: true });
+        [team]: ""
+    }, { merge: true });
 
     const allTeams = ["Zack", "Ryan", "Kyle"];
     const remaining = allTeams.filter(t => !outs.includes(t));
-    const buzzerState = await getBuzzerState();
 
-    // 🛑 Condition 1: lahat ng teams mali / time up
+    // 🛑 Condition 1: lahat ng 3 teams OUT → reveal answer
     if (remaining.length === 0) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🛑 Condition 2: Steal mode, lahat ng natira hindi nag-buzz
-    if (buzzerState.stealMode && remaining.length === 0) {
-        stopAllTimersAndSounds();
-        await revealCorrectAnswerAndLock();
-        return;
+    // 🟡 Case 2: isa na lang natira → FINAL CHANCE
+    if (remaining.length === 1) {
+        await setBuzzerState({
+            enableBuzzer: true,
+            buzzed: "",
+            answeringTeam: "",
+            stealMode: true
+        });
+        if (document.getElementById("stealNotice")) {
+            document.getElementById("stealNotice").innerText =
+                "🚨 FINAL CHANCE: " + remaining[0] + " must answer!";
+        }
+    }
+    // 🟢 Case 3: dalawa pa natitira → STEAL MODE
+    else if (remaining.length === 2) {
+        await setBuzzerState({
+            enableBuzzer: true,
+            buzzed: "",
+            answeringTeam: "",
+            stealMode: true
+        });
+        if (document.getElementById("stealNotice")) {
+            document.getElementById("stealNotice").innerText =
+                "🚨 STEAL MODE: " + team + " is OUT! Remaining teams: " + remaining.join(", ");
+        }
     }
 
-    // 🛑 Condition 3: 2 teams natira pero parehong hindi nag-buzz, tapos 1 team na lang matitira
-    if (remaining.length === 1 && buzzerState.enableBuzzer === false) {
-        stopAllTimersAndSounds();
-        await revealCorrectAnswerAndLock();
-        return;
-    }
-
-    // Otherwise, open steal mode para sa remaining teams
-    await setBuzzerState({
-        enableBuzzer: true,
-        buzzed: "",
-        answeringTeam: "",
-        stealMode: true
-    });
-
-    if (document.getElementById("stealNotice")) {
-        document.getElementById("stealNotice").innerText =
-            "🚨 STEAL MODE: " + team + " is OUT! Remaining: " + remaining.join(", ");
-    }
-
+    // reset countdown for steal (buzz mode)
     clearInterval(countdownInterval);
     mode = "buzz";
     timeLeft = buzzTime;
