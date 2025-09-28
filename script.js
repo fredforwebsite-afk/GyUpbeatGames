@@ -278,9 +278,22 @@ function switchToAnswer(team) {
     updateCircle(answerTime, "yellow", answerTime);
     if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
 
+    // 🟢 SHOW answer box only if ikaw yung answering team
+    let myTeam = sessionStorage.getItem("team");
+    const area = document.getElementById("answerArea");
+    if (area) {
+        if (myTeam === team) {
+            area.style.display = "block";
+        } else {
+            area.style.display = "none";
+        }
+    }
+
     // start answer countdown
     countdownInterval = setInterval(runTimer, 1000);
 }
+
+
 
 // 🎨 Update circle progress (SVG circle expected)
 function updateCircle(time, color, max) {
@@ -352,10 +365,18 @@ async function submitAnswer() {
             submittedAnswer: ans
         }, { merge: true });
 
-        if (document.getElementById("answerArea")) document.getElementById("answerArea").style.display = "none";
-        clearInterval(answerTimerInterval); // stop admin answer timer loop if running
+        // 🛑 Auto-hide input box after submit
+        if (document.getElementById("answerArea")) {
+            document.getElementById("answerArea").style.display = "none";
+        }
+
+        // optional: clear input field
+        if (ansEl) ansEl.value = "";
+
+        clearInterval(answerTimerInterval);
     }
 }
+
 
 // ================= ANSWER TIMER & EVALUATION =================
 function startAnswerTimer(team) {
@@ -583,7 +604,6 @@ function registerTeamBuzzerUI() {
         let enable = data.enableBuzzer;
         let stealMode = !!data.stealMode; // true/false only
         let alreadyBuzzed = data.buzzed;
-        let answeringTeam = data.answeringTeam || "";
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
@@ -595,31 +615,8 @@ function registerTeamBuzzerUI() {
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
-
-        // 🟢 NEW: control answer area
-        const area = document.getElementById("answerArea");
-        const ansInput = document.getElementById("teamAnswer");
-
-        if (!enable) {
-            // ❌ buzzer disabled → hide/disable answer box for everyone
-            if (area) area.style.display = "none";
-            if (ansInput) ansInput.disabled = true;
-        } else {
-            // ✅ buzzer enabled
-            if (area) {
-                // show answer area only if this team is the answeringTeam
-                if (team === answeringTeam) {
-                    area.style.display = "block";
-                    if (ansInput) ansInput.disabled = false;
-                } else {
-                    area.style.display = "none";
-                    if (ansInput) ansInput.disabled = true;
-                }
-            }
-        }
     });
 }
-
 
 
 // attach team buzzer click handler
