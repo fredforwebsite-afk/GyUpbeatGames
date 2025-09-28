@@ -205,7 +205,9 @@ async function startRound() {
 
 function runTimer() {
     timeLeft--;
-    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+    if (document.getElementById("circleTime")) {
+        document.getElementById("circleTime").textContent = timeLeft;
+    }
 
     if (mode === "buzz") {
         updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
@@ -216,7 +218,9 @@ function runTimer() {
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
             setBuzzerState({ enableBuzzer: false }).catch(console.error);
-            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "⏳ No Buzz";
+            if (document.getElementById("circleTime")) {
+                document.getElementById("circleTime").textContent = "⏳ No Buzz";
+            }
             stopAllTimersAndSounds();
             playSound("timesUpSound");
             if (document.getElementById("stealNotice")) {
@@ -224,6 +228,7 @@ function runTimer() {
                     `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
             }
         }
+
     } else if (mode === "answer") {
         updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
 
@@ -232,11 +237,22 @@ function runTimer() {
 
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
-            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "⏳ Time's up!";
+            if (document.getElementById("circleTime")) {
+                document.getElementById("circleTime").textContent = "⏳ Time's up!";
+            }
             playSound("timesUpSound");
+
+            // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
+            getBuzzerState().then(state => {
+                const team = state.answeringTeam;
+                if (team) {
+                    handleTeamWrongOrTimeout(team, "TIME UP").catch(console.error);
+                }
+            });
         }
     }
 }
+
 
 // 🛑 If a team buzzes early
 async function stopOnBuzz(team) {
@@ -343,38 +359,23 @@ async function submitAnswer() {
 
 // ================= ANSWER TIMER & EVALUATION =================
 function startAnswerTimer(team) {
-    // will show on admin UI
-    let sec = answerTime;
-    if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
+    // Switch to answer mode, start countdown handled by runTimer
+    clearInterval(countdownInterval);
+    mode = "answer";
+    timeLeft = answerTime;
 
-    clearInterval(answerTimerInterval);
-    answerTimerInterval = setInterval(async() => {
-        // Check answers doc for this team's submission
-        const snap = await getDoc(doc(db, "game", "answers"));
-        const data = snap.exists() ? snap.data() : {};
-        const ans = data[team] || "";
+    updateCircle(answerTime, "yellow", answerTime);
+    if (document.getElementById("circleTime")) {
+        document.getElementById("circleTime").textContent = timeLeft;
+    }
+    if (document.getElementById("submittedAnswer")) {
+        document.getElementById("submittedAnswer").innerText = "⏳ " + timeLeft + "s left...";
+    }
 
-        if (ans && ans.trim() !== "") {
-            // admin will evaluate via evaluateAnswer flow (answers snapshot handled below)
-            clearInterval(answerTimerInterval);
-            answerTimerInterval = null;
-            return;
-        }
-
-        sec--;
-        if (sec >= 0 && document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
-        }
-
-        if (sec < 0) {
-            clearInterval(answerTimerInterval);
-            answerTimerInterval = null;
-            if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "❌ No answer submitted";
-            stopAllTimersAndSounds();
-            await handleTeamWrongOrTimeout(team, "TIME UP");
-        }
-    }, 1000);
+    // start countdown loop (runTimer will handle timeout and call handleTeamWrongOrTimeout)
+    countdownInterval = setInterval(runTimer, 1000);
 }
+
 
 // central answer evaluation (called when answers doc changes)
 async function evaluateAnswer(team, ans) {
