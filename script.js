@@ -205,7 +205,9 @@ async function startRound() {
 
 function runTimer() {
     timeLeft--;
-    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+    if (document.getElementById("circleTime")) {
+        document.getElementById("circleTime").textContent = timeLeft;
+    }
 
     if (mode === "buzz") {
         updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
@@ -216,7 +218,9 @@ function runTimer() {
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
             setBuzzerState({ enableBuzzer: false }).catch(console.error);
-            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "⏳ No Buzz";
+            if (document.getElementById("circleTime")) {
+                document.getElementById("circleTime").textContent = "⏳ No Buzz";
+            }
             stopAllTimersAndSounds();
             playSound("timesUpSound");
             if (document.getElementById("stealNotice")) {
@@ -224,6 +228,7 @@ function runTimer() {
                     `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
             }
         }
+
     } else if (mode === "answer") {
         updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
 
@@ -232,11 +237,27 @@ function runTimer() {
 
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
-            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "⏳ Time's up!";
+            if (document.getElementById("circleTime")) {
+                document.getElementById("circleTime").textContent = "⏳ Time's up!";
+            }
             playSound("timesUpSound");
+
+            // 🛑 Hide the answer box on timeout
+            const area = document.getElementById("answerArea");
+            if (area) area.style.display = "none";
+
+
+            // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
+            getBuzzerState().then(state => {
+                const team = state.answeringTeam;
+                if (team) {
+                    handleTeamWrongOrTimeout(team, "TIME UP").catch(console.error);
+                }
+            });
         }
     }
 }
+
 
 // 🛑 If a team buzzes early
 async function stopOnBuzz(team) {
@@ -262,9 +283,22 @@ function switchToAnswer(team) {
     updateCircle(answerTime, "yellow", answerTime);
     if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
 
+    // 🟢 SHOW answer box only if ikaw yung answering team
+    let myTeam = sessionStorage.getItem("team");
+    const area = document.getElementById("answerArea");
+    if (area) {
+        if (myTeam === team) {
+            area.style.display = "block";
+        } else {
+            area.style.display = "none";
+        }
+    }
+
     // start answer countdown
     countdownInterval = setInterval(runTimer, 1000);
 }
+
+
 
 // 🎨 Update circle progress (SVG circle expected)
 function updateCircle(time, color, max) {
@@ -336,10 +370,18 @@ async function submitAnswer() {
             submittedAnswer: ans
         }, { merge: true });
 
-        if (document.getElementById("answerArea")) document.getElementById("answerArea").style.display = "none";
-        clearInterval(answerTimerInterval); // stop admin answer timer loop if running
+        // 🛑 Auto-hide input box after submit
+        if (document.getElementById("answerArea")) {
+            document.getElementById("answerArea").style.display = "none";
+        }
+
+        // optional: clear input field
+        if (ansEl) ansEl.value = "";
+
+        clearInterval(answerTimerInterval);
     }
 }
+
 
 // ================= ANSWER TIMER & EVALUATION =================
 function startAnswerTimer(team) {
@@ -422,7 +464,13 @@ async function evaluateAnswer(team, ans) {
 
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
-    if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
+    // 🛑 Hide answer box for the team
+    const area = document.getElementById("answerArea");
+    if (area) area.style.display = "none";
+
+    if (document.getElementById("firstBuzz")) {
+        document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
+    }
 
     const outs = await getOutTeams();
     if (!outs.includes(team)) outs.push(team);
@@ -434,36 +482,88 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         [team]: ""
     }, { merge: true });
 
+    const allTeams = ["Zack", "Ryan", "Kyle"];
+    const remaining = allTeams.filter(t => !outs.includes(t));
+
+    // 🛑 Condition 1: lahat ng 3 teams OUT → reveal answer
     if (outs.length >= 3) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
-    } else {
-        // allow remaining teams to buzz (steal)
-        await setBuzzerState({ enableBuzzer: true });
-        if (document.getElementById("stealNotice")) {
-            document.getElementById("stealNotice").innerText = "🚨 STEAL MODE: " + team + " is OUT! Remaining teams may buzz.";
-        }
-
-        // reset countdown for steal (buzz mode)
-        clearInterval(countdownInterval);
-        mode = "buzz";
-        timeLeft = buzzTime;
-        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-        updateCircle(buzzTime, "lime", buzzTime);
-        countdownInterval = setInterval(runTimer, 1000);
+        return;
     }
+
+    // 🛑 Condition 2: steal mode, last team na nag-time up → reveal answer
+    const buzzerState = await getBuzzerState();
+    if (buzzerState.stealMode && remaining.length === 0) {
+        stopAllTimersAndSounds();
+        await revealCorrectAnswerAndLock();
+        return;
+    }
+
+    // 🛑 Condition 3: dalawa na lang ang natira pero parehong di nakapag-buzz → reveal answer
+    if (remaining.length === 2 && buzzerState.enableBuzzer === false) {
+        stopAllTimersAndSounds();
+        await revealCorrectAnswerAndLock();
+        return;
+    }
+
+    // Otherwise, tuloy steal mode
+    if (remaining.length === 1) {
+        // 🟡 Only one team left → buzzer just for them
+        await setBuzzerState({
+            enableBuzzer: true,
+            buzzed: "",
+            answeringTeam: "",
+            stealMode: true
+        });
+        if (document.getElementById("stealNotice")) {
+            document.getElementById("stealNotice").innerText =
+                "🚨 FINAL CHANCE: " + remaining[0] + " must answer!";
+        }
+    } else {
+        // 🟢 More than one team left → open steal for them
+        await setBuzzerState({
+            enableBuzzer: true,
+            buzzed: "",
+            answeringTeam: "",
+            stealMode: true
+        });
+        if (document.getElementById("stealNotice")) {
+            document.getElementById("stealNotice").innerText =
+                "🚨 STEAL MODE: " + team + " is OUT! Remaining teams may buzz.";
+        }
+    }
+
+    // reset countdown for steal (buzz mode)
+    clearInterval(countdownInterval);
+    mode = "buzz";
+    timeLeft = buzzTime;
+    if (document.getElementById("circleTime"))
+        document.getElementById("circleTime").textContent = timeLeft;
+    updateCircle(buzzTime, "lime", buzzTime);
+    countdownInterval = setInterval(runTimer, 1000);
 }
+
 
 async function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
-    stopAllTimersAndSounds();
     playSound("wrongSound");
+    stopAllTimersAndSounds();
+
+    // ✅ Alert pa rin para sure admin makakita
     alert("No team answered correctly. Correct answer is: " + correct);
 
+    // ✅ Player-side submitted answer box
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
     }
 
+    // ✅ Admin-side reveal box
+    if (document.getElementById("revealAnswer")) {
+        document.getElementById("revealAnswer").innerText = "✔ Correct Answer: " + correct;
+    }
+
+    // Lock question at reset states
     lockQuestion(currentLevel, currentQIndex);
     stopAllTimersAndSounds();
     await setBuzzerState({
@@ -472,10 +572,12 @@ async function revealCorrectAnswerAndLock() {
         answeringTeam: "",
         stealMode: false
     });
+    stopAllTimersAndSounds();
     await setOutTeams([]);
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 }
+
 
 // single-use steal mode starter
 async function startStealMode(team) {
@@ -511,19 +613,34 @@ function registerTeamBuzzerUI() {
         let enable = data.enableBuzzer;
         let stealMode = !!data.stealMode; // true/false only
         let alreadyBuzzed = data.buzzed;
+        let answeringTeam = data.answeringTeam;
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
+        // normal buzz rules
         const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
 
-        // steal: same rules, but only active if stealMode is true
+        // steal mode rules
         const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
+
+        // 🟢 SHOW answer box ONLY if ikaw ang answering team
+        const area = document.getElementById("answerArea");
+        if (area) {
+            if (answeringTeam === team) {
+                area.style.display = "block";
+                // auto-focus para ready na magtype
+                const input = document.getElementById("teamAnswer");
+                if (input) input.focus();
+            } else {
+                area.style.display = "none";
+            }
+        }
     });
 }
+
 
 
 // attach team buzzer click handler
