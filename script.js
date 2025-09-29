@@ -606,10 +606,10 @@ function registerAnswersListener() {
 
 // ================= TEAM BUZZER UI (real-time enable/disable) =================
 function registerTeamBuzzerUI() {
-    onSnapshot(doc(db, "game", "buzzer"), async(snap) => {
+    onSnapshot(doc(db, "game", "buzzer"), async (snap) => {
         const data = snap.exists() ? snap.data() : {};
         let enable = data.enableBuzzer;
-        let stealMode = !!data.stealMode; // true/false only
+        let stealMode = !!data.stealMode;
         let alreadyBuzzed = data.buzzed;
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
@@ -622,8 +622,19 @@ function registerTeamBuzzerUI() {
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
+
+        // ✅ Always show answer box if this team is the answering team
+        const area = document.getElementById("answerArea");
+        if (area) {
+            if (data.answeringTeam === team) {
+                area.style.display = "block";
+            } else {
+                area.style.display = "none";
+            }
+        }
     });
 }
+
 
 
 // attach team buzzer click handler
@@ -632,36 +643,15 @@ if (document.getElementById("buzzerBtn")) {
         let team = sessionStorage.getItem("team");
         if (!team) return;
 
-        const state = await getBuzzerState(); // get latest buzzer state
-        const outs = await getOutTeams();
-        const allTeams = ["Zack", "Ryan", "Kyle"];
-        const remaining = allTeams.filter(t => !outs.includes(t));
+        await setBuzzerState({ buzzed: team });
 
-        // Case 1: first buzz (normal or steal mode with multiple teams)
-        if (!state.buzzed) {
-            await setBuzzerState({ buzzed: team });
+        const btn = document.getElementById("buzzerBtn");
+        if (btn) btn.disabled = true;
 
-            const btn = document.getElementById("buzzerBtn");
-            if (btn) btn.disabled = true;
-
-            const area = document.getElementById("answerArea");
-            if (area) area.style.display = "block";
-
-            playSound("buzzSound");
-        }
-
-        // Case 2: steal mode AND only one team left → auto-show box
-        else if (state.stealMode && remaining.length === 1 && remaining[0] === team) {
-            const btn = document.getElementById("buzzerBtn");
-            if (btn) btn.disabled = true;
-
-            const area = document.getElementById("answerArea");
-            if (area) area.style.display = "block";
-
-            playSound("buzzSound");
-        }
+        playSound("buzzSound");
     };
 }
+
 
 
 // ================= QUESTION BOARD =================
@@ -783,4 +773,5 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
