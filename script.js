@@ -171,14 +171,14 @@ function stopAllTimersAndSounds() {
 let buzzerSnapshotCleanup = null;
 
 async function startRound() {
+        await resetTurnState();
     // stop existing countdown
     clearInterval(countdownInterval);
     timeLeft = buzzTime;
     mode = "buzz";
 
-    await resetTurnState();
     await setBuzzerState({
-        enableBuzzer: false,   // default: always off
+        enableBuzzer: false,  // stays locked until timer starts
         buzzedDevice: "",
         buzzedTeam: "",
         answeringTeam: "",
@@ -186,8 +186,6 @@ async function startRound() {
         stealMode: false,
         stealTeam: ""
     });
-
-    await setOutTeams([]);
     
     updateCircle(buzzTime, "lime", buzzTime);
     if (document.getElementById("circleTime")) 
@@ -733,16 +731,20 @@ async function showBoard(level, btn) {
     currentLevel = level;
 
     let container = document.getElementById("questionBox");
-    if (container) container.style.display = "grid"; // show board kapag pinili na
+    if (container) container.style.display = "grid";
 
     renderBoard(level);
+    
+    // ❌ Do not auto-reset buzzer when just selecting level
     await setBuzzerState({ enableBuzzer: false });
 
     document.querySelectorAll(".level-btn").forEach(b => b.classList.remove("selected"));
     if (btn) btn.classList.add("selected");
 
-    await resetTurnState();
+    // Remove resetTurnState here
+    // await resetTurnState();
 }
+
 
 
 function renderBoard(level) {
@@ -780,10 +782,12 @@ async function revealQuestion(index, question, element, level) {
         level
     });
 
-
     currentQIndex = index;
-    await resetTurnState();
+
+    // ❌ Remove this
+    // await resetTurnState();
 }
+
 
 // Lock box after answered (UI only)
 function lockQuestion(level, index) {
