@@ -143,7 +143,7 @@ await setBuzzerState({
     }, { merge: true });
 
     // UI resets
-    if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳";
+ if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳";
     if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").innerText = "None yet";
     if (document.getElementById("stealNotice")) document.getElementById("stealNotice").innerText = "";
 }
@@ -178,14 +178,17 @@ async function startRound() {
 
     await resetTurnState();
     await setBuzzerState({
-        enableBuzzer: true,
-        buzzedTeam: "",
+        enableBuzzer: false,   // default: always off
         buzzedDevice: "",
+        buzzedTeam: "",
         answeringTeam: "",
         answeringDevice: "",
-        stealMode: false
+        stealMode: false,
+        stealTeam: ""
     });
 
+    await setOutTeams([]);
+    
     updateCircle(buzzTime, "lime", buzzTime);
     if (document.getElementById("circleTime")) 
         document.getElementById("circleTime").textContent = timeLeft;
@@ -317,7 +320,13 @@ function playSound(id) {
 
 async function resetGame() {
     scores = { Zack: 0, Ryan: 0, Kyle: 0 };
-    await setDoc(doc(db, "game", "scores"), scores);
+        await setDoc(doc(db, "game", "answers"), {
+        Zack: "",
+        Ryan: "",
+        Kyle: "",
+        submittedAnswer: ""
+    }, { merge: true });
+
     updateScores();
     await setBuzzerState({
         enableBuzzer: false,
