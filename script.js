@@ -212,6 +212,8 @@ async function startRound() {
 
 
 function runTimer() {
+    if (!countdownInterval || timeLeft <= 0) return; // ⬅️ prevent ghost ticking
+
     timeLeft--;
     if (document.getElementById("circleTime")) {
         document.getElementById("circleTime").textContent = timeLeft;
@@ -463,53 +465,57 @@ async function evaluateAnswer(team, ans) {
 
     const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
 
-    // ✅ Case 1: Correct answer
-    if (ans.trim().toLowerCase() === correctAns) {
-        stopAllTimersAndSounds();
-        playSound("correctSound");
+// ✅ Case 1: Correct answer
+if (ans.trim().toLowerCase() === correctAns) {
+    stopAllTimersAndSounds();
 
-        let points = (lvl === "easy") ? 100 : (lvl === "medium") ? 300 : 500;
-        scores[team] = (scores[team] || 0) + points;
+    // 🛑 clear ALL intervals immediately
+    clearInterval(answerTimerInterval);
+    clearInterval(countdownInterval);
+    answerTimerInterval = null;
+    countdownInterval = null;
 
-        await saveScores();
-        updateScores();
-        highlightScore(team);
+    playSound("correctSound");
 
-        // 🛑 stop ALL countdowns
-        clearInterval(countdownInterval);
-        clearInterval(answerTimerInterval);
-        countdownInterval = null;
-        answerTimerInterval = null;
+    let points = (lvl === "easy") ? 100 : (lvl === "medium") ? 300 : 500;
+    scores[team] = (scores[team] || 0) + points;
 
-        timeLeft = 0;
-        if (document.getElementById("circleTime")) {
-            document.getElementById("circleTime").textContent = "0";
-        }
-        updateCircle(0, "lime", answerTime);
+    await saveScores();
+    updateScores();
+    highlightScore(team);
 
-        // mark as correct
-        if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText =
-                "✅ " + team + " is CORRECT!";
-        }
-
-        // lock question and cleanup
-        lockQuestion(lvl, idx);
-
-        await setBuzzerState({
-            enableBuzzer: false,   // ✅ lock buzzers
-            buzzed: "",
-            answeringDevice: "",
-            answeringTeam: "",
-            stealMode: false
-        });
-
-        await setOutTeams([]);
-
-        await setDoc(doc(db, "game", "answers"), {
-            [team]: ""
-        }, { merge: true });
+    timeLeft = 0;
+    if (document.getElementById("circleTime")) {
+        document.getElementById("circleTime").textContent = "0";
     }
+    updateCircle(0, "lime", answerTime);
+
+    if (document.getElementById("submittedAnswer")) {
+        document.getElementById("submittedAnswer").innerText =
+            "✅ " + team + " is CORRECT!";
+    }
+
+    // lock question and cleanup
+    lockQuestion(lvl, idx);
+
+    // 🛑 lock buzzers and prevent any more steal timers
+    await setBuzzerState({
+        enableBuzzer: false,
+        buzzed: "",
+        answeringDevice: "",
+        answeringTeam: "",
+        stealMode: false
+    });
+
+    await setOutTeams([]);
+
+    // clear answers so no re-evaluation happens
+    await setDoc(doc(db, "game", "answers"), {
+        [team]: ""
+    }, { merge: true });
+
+    return; // ⬅️ VERY IMPORTANT: stop further execution
+}
 
     // ❌ Case 2: Wrong answer
     else {
@@ -526,6 +532,7 @@ async function evaluateAnswer(team, ans) {
 // ================= WRONG / TIMEOUT / STEAL =================
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
+    if (!countdownInterval && !answerTimerInterval) return;
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
