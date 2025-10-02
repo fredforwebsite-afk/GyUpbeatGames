@@ -451,6 +451,8 @@ async function evaluateAnswer(team, ans) {
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "📝 " + ans;
     }
+
+    // clear answer timer immediately
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 
@@ -473,27 +475,40 @@ async function evaluateAnswer(team, ans) {
         updateScores();
         highlightScore(team);
 
-        // stop countdown
+        // 🛑 stop ALL countdowns
         clearInterval(countdownInterval);
+        clearInterval(answerTimerInterval);
+        countdownInterval = null;
+        answerTimerInterval = null;
+
         timeLeft = 0;
         if (document.getElementById("circleTime")) {
             document.getElementById("circleTime").textContent = "0";
         }
         updateCircle(0, "lime", answerTime);
 
-        // mark lang as correct (no reveal)
+        // mark as correct
         if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT!";
+            document.getElementById("submittedAnswer").innerText =
+                "✅ " + team + " is CORRECT!";
         }
 
         // lock question and cleanup
         lockQuestion(lvl, idx);
-        await setBuzzerState({ buzzed: "" });
+
+        await setBuzzerState({
+            enableBuzzer: false,   // ✅ lock buzzers
+            buzzed: "",
+            answeringDevice: "",
+            answeringTeam: "",
+            stealMode: false
+        });
+
+        await setOutTeams([]);
+
         await setDoc(doc(db, "game", "answers"), {
             [team]: ""
         }, { merge: true });
-        await setBuzzerState({ stealMode: false });
-        await setOutTeams([]);
     }
 
     // ❌ Case 2: Wrong answer
@@ -503,6 +518,7 @@ async function evaluateAnswer(team, ans) {
         // ❌ wag mag-reveal ng tamang sagot dito
     }
 }
+
 
 
 
