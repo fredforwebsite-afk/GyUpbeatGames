@@ -123,13 +123,15 @@ async function resetTurnState() {
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 
-    // reset buzzer and outTeams
-    await setBuzzerState({
-        buzzed: "",
-        enableBuzzer: false,
-        answeringTeam: "",
-        stealMode: false
-    });
+// inside handleTeamWrongOrTimeout
+await setBuzzerState({
+    enableBuzzer: true,
+    buzzedDevice: "",   // 🟢 clear this
+    buzzedTeam: "",     // 🟢 clear this
+    answeringTeam: "",
+    answeringDevice: "",
+    stealMode: true
+});
     await setOutTeams([]);
 
     // clear answers for safety (keeps doc but empties teams)
@@ -494,17 +496,20 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
 
+    // mark this team as OUT
     const outs = await getOutTeams();
     if (!outs.includes(team)) outs.push(team);
     await setOutTeams(outs);
 
-    // clear the buzz and that team's answer, and remove answeringDevice
+    // clear any active buzz
     await setBuzzerState({
         buzzedDevice: "",
         buzzedTeam: "",
         answeringDevice: "",
         answeringTeam: "",
     });
+
+    // clear answer
     await setDoc(doc(db, "game", "answers"), {
         [team]: ""
     }, { merge: true });
@@ -512,21 +517,24 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     const allTeams = ["Zack", "Ryan", "Kyle"];
     const remaining = allTeams.filter(t => !outs.includes(t));
 
-    // 🛑 Case 1: lahat ng 3 teams OUT → reveal answer
+    // 🛑 Case 1: no one left → reveal answer
     if (remaining.length === 0) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🟡 Case 2: isa na lang natira → siya lang ang naka-enable buzzer
+    // 🟡 Case 2: one team left → that team only can buzz
     if (remaining.length === 1) {
         const lastTeam = remaining[0];
         await setBuzzerState({
-            enableBuzzer: true, // siya lang ang pwede mag-buzz
-            buzzed: "",
+            enableBuzzer: true,
+            buzzedDevice: "",
+            buzzedTeam: "",
+            answeringDevice: "",
             answeringTeam: "",
-            stealMode: true
+            stealMode: true,
+            stealTeam: lastTeam    // 🟢 mark explicitly
         });
 
         if (document.getElementById("stealNotice")) {
@@ -534,33 +542,33 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
                 "🚨 FINAL CHANCE: " + lastTeam + " must buzz to answer!";
         }
 
-        // reset countdown for STEAL buzz
-        clearInterval(countdownInterval);
-        mode = "buzz";
-        timeLeft = buzzTime;
-        if (document.getElementById("circleTime"))
-            document.getElementById("circleTime").textContent = timeLeft;
-        updateCircle(buzzTime, "lime", buzzTime);
-        countdownInterval = setInterval(runTimer, 1000);
-
+        restartStealCountdown();
         return;
     }
 
-    // 🟢 Case 3: dalawa pa natitira → STEAL MODE normal
-    else if (remaining.length === 2) {
+    // 🟢 Case 3: 2 teams left → both can steal
+    if (remaining.length === 2) {
         await setBuzzerState({
             enableBuzzer: true,
-            buzzed: "",
+            buzzedDevice: "",
+            buzzedTeam: "",
+            answeringDevice: "",
             answeringTeam: "",
-            stealMode: true
+            stealMode: true,
+            stealTeam: ""   // 🟢 empty = any remaining team can buzz
         });
+
         if (document.getElementById("stealNotice")) {
             document.getElementById("stealNotice").innerText =
-                "🚨 STEAL MODE: " + team + " is OUT! Remaining teams: " + remaining.join(", ");
+                "🚨 STEAL MODE: " + team + " is OUT! Remaining: " + remaining.join(", ");
         }
-    }
 
-    // reset countdown for STEAL buzz (2 remaining teams)
+        restartStealCountdown();
+    }
+}
+
+// helper to restart the timer cleanly
+function restartStealCountdown() {
     clearInterval(countdownInterval);
     mode = "buzz";
     timeLeft = buzzTime;
@@ -569,6 +577,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     updateCircle(buzzTime, "lime", buzzTime);
     countdownInterval = setInterval(runTimer, 1000);
 }
+
 
 
 
@@ -639,22 +648,30 @@ function registerAnswersListener() {
 function registerTeamBuzzerUI() {
     onSnapshot(doc(db, "game", "buzzer"), async (snap) => {
         const data = snap.exists() ? snap.data() : {};
-        let enable = !!data.enableBuzzer;
-        let stealMode = !!data.stealMode;
-        let alreadyBuzzedDevice = data.buzzedDevice;
-        let team = sessionStorage.getItem("team");
+        const enable = !!data.enableBuzzer;
+        const stealMode = !!data.stealMode;
+        const team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // can buzz when buzzer enabled, no device has buzzed yet, and this device's team is not out
-        const canNormal = enable && !alreadyBuzzedDevice && !outs.includes(team);
+        // Normal buzzing: any active (non-out) team when buzzer is enabled
+        const canNormal = enable && !data.buzzedDevice && !outs.includes(team);
 
-        // steal: active only when stealMode true
-        const canSteal = stealMode && !alreadyBuzzedDevice && !outs.includes(team);
+        // Steal buzzing:
+        // - Must be in steal mode
+        // - Must not be OUT
+        // - No one has buzzed yet
+        // - Either no specific stealTeam set (2 teams left), OR this team is the designated stealTeam
+        const canSteal =
+            stealMode &&
+            !data.buzzedDevice &&
+            !outs.includes(team) &&
+            (data.stealTeam === "" || data.stealTeam === team);
 
+        // Enable/disable the buzzer button
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
 
-        // Show answer area ONLY if the current device is the answeringDevice
+        // Show answer area ONLY if this device is the one that buzzed
         const area = document.getElementById("answerArea");
         if (area) {
             if (data.answeringDevice === DEVICE_ID) {
