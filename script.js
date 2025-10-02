@@ -177,15 +177,20 @@ async function startRound() {
     await resetTurnState();
     await setBuzzerState({
         enableBuzzer: true,
-        buzzed: "",
+        buzzedTeam: "",
+        buzzedDevice: "",
         answeringTeam: "",
+        answeringDevice: "",
         stealMode: false
     });
 
     updateCircle(buzzTime, "lime", buzzTime);
-    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-    if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "None yet";
-    if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
+    if (document.getElementById("circleTime")) 
+        document.getElementById("circleTime").textContent = timeLeft;
+    if (document.getElementById("firstBuzz")) 
+        document.getElementById("firstBuzz").textContent = "None yet";
+    if (document.getElementById("stealNotice")) 
+        document.getElementById("stealNotice").textContent = "";
 
     // register a single buzzer snapshot listener (unsub first if already registered)
     if (buzzerUnsub) {
@@ -194,14 +199,15 @@ async function startRound() {
     }
     buzzerUnsub = onSnapshot(doc(db, "game", "buzzer"), (snap) => {
         const data = snap.exists() ? snap.data() : {};
-        if (data.buzzed && data.buzzed !== "") {
+        if (data.buzzedDevice && data.buzzedTeam) {
             // buzz happened
-            stopOnBuzz(data.buzzed).catch(console.error);
+            stopOnBuzz(data.buzzedDevice, data.buzzedTeam).catch(console.error);
         }
     });
 
     countdownInterval = setInterval(runTimer, 1000);
 }
+
 
 function runTimer() {
     timeLeft--;
@@ -255,20 +261,23 @@ function runTimer() {
 
 
 // 🛑 If a team buzzes early
-async function stopOnBuzz(team) {
-    if (!team) return;
+async function stopOnBuzz(deviceId, team) {
+    if (!deviceId) return;
 
     if (document.getElementById("firstBuzz"))
-        document.getElementById("firstBuzz").textContent = team;
+        document.getElementById("firstBuzz").textContent = (team ? team : "Device") + " (" + deviceId + ")";
 
+    // set answeringTeam/answeringDevice and disable buzzer
     await setBuzzerState({
-        answeringTeam: team,
+        buzzedDevice: deviceId,
+        buzzedTeam: team || "",
+        answeringTeam: team || "",
+        answeringDevice: deviceId,
         enableBuzzer: false
     });
 
-    switchToAnswer(team);
+    switchToAnswer(team || "");
 }
-
 // 🔄 Switch from buzz mode to answer mode
 function switchToAnswer(team) {
     clearInterval(countdownInterval);
@@ -335,11 +344,27 @@ function highlightScore(team) {
 }
 
 // ================= TEAM FUNCTIONS =================
+// --- 1) DEVICE ID GENERATION (add near VARIABLES or startup) ---
+function getOrCreateDeviceId() {
+    let id = sessionStorage.getItem("deviceId");
+    if (!id) {
+        // random short id — safe for client identification in this game
+        id = "dev-" + Math.random().toString(36).slice(2, 10);
+        sessionStorage.setItem("deviceId", id);
+    }
+    return id;
+}
+
+// call once at load
+const DEVICE_ID = getOrCreateDeviceId();
+
+
+// --- 2) selectTeam (showing team UI) — add storing deviceId visual optional ---
 function selectTeam(team) {
     sessionStorage.setItem("team", team);
     if (document.getElementById("teamSelect")) document.getElementById("teamSelect").style.display = "none";
     if (document.getElementById("buzzerArea")) document.getElementById("buzzerArea").style.display = "block";
-    if (document.getElementById("teamName")) document.getElementById("teamName").innerText = "You are " + team;
+    if (document.getElementById("teamName")) document.getElementById("teamName").innerText = "You are " + team + " (" + DEVICE_ID + ")";
 }
 
 async function submitAnswer() {
@@ -350,17 +375,18 @@ async function submitAnswer() {
         await setDoc(doc(db, "game", "answers"), {
             [team]: ans,
             submittedAnswer: ans,
-            level: currentLevel, // 🟢 save current level
-            index: currentQIndex // 🟢 save current index
+            submittedByDevice: DEVICE_ID,
+            level: currentLevel,
+            index: currentQIndex
         }, { merge: true });
 
         if (document.getElementById("answerArea")) {
             document.getElementById("answerArea").style.display = "none";
         }
-        clearInterval(answerTimerInterval); // stop admin answer timer loop if running
+        clearInterval(answerTimerInterval);
+        answerTimerInterval = null;
     }
 }
-
 
 
 // ================= ANSWER TIMER & EVALUATION =================
@@ -472,8 +498,13 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (!outs.includes(team)) outs.push(team);
     await setOutTeams(outs);
 
-    // clear the buzz and that team's answer
-    await setBuzzerState({ buzzed: "" });
+    // clear the buzz and that team's answer, and remove answeringDevice
+    await setBuzzerState({
+        buzzedDevice: "",
+        buzzedTeam: "",
+        answeringDevice: "",
+        answeringTeam: "",
+    });
     await setDoc(doc(db, "game", "answers"), {
         [team]: ""
     }, { merge: true });
@@ -608,25 +639,25 @@ function registerAnswersListener() {
 function registerTeamBuzzerUI() {
     onSnapshot(doc(db, "game", "buzzer"), async (snap) => {
         const data = snap.exists() ? snap.data() : {};
-        let enable = data.enableBuzzer;
+        let enable = !!data.enableBuzzer;
         let stealMode = !!data.stealMode;
-        let alreadyBuzzed = data.buzzed;
+        let alreadyBuzzedDevice = data.buzzedDevice;
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
-        const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
+        // can buzz when buzzer enabled, no device has buzzed yet, and this device's team is not out
+        const canNormal = enable && !alreadyBuzzedDevice && !outs.includes(team);
 
-        // steal: same rules, but only active if stealMode is true
-        const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
+        // steal: active only when stealMode true
+        const canSteal = stealMode && !alreadyBuzzedDevice && !outs.includes(team);
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
 
-        // ✅ Always show answer box if this team is the answering team
+        // Show answer area ONLY if the current device is the answeringDevice
         const area = document.getElementById("answerArea");
         if (area) {
-            if (data.answeringTeam === team) {
+            if (data.answeringDevice === DEVICE_ID) {
                 area.style.display = "block";
             } else {
                 area.style.display = "none";
@@ -637,13 +668,21 @@ function registerTeamBuzzerUI() {
 
 
 
+
 // attach team buzzer click handler
 if (document.getElementById("buzzerBtn")) {
     document.getElementById("buzzerBtn").onclick = async () => {
         let team = sessionStorage.getItem("team");
         if (!team) return;
 
-        await setBuzzerState({ buzzed: team });
+        // write both team and device so admin & other clients know who buzzed
+        await setBuzzerState({
+            buzzedDevice: DEVICE_ID,
+            buzzedTeam: team,
+            answeringTeam: team,
+            answeringDevice: DEVICE_ID,
+            enableBuzzer: false
+        });
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = true;
@@ -773,5 +812,6 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
