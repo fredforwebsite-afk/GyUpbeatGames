@@ -171,14 +171,13 @@ function stopAllTimersAndSounds() {
 let buzzerSnapshotCleanup = null;
 
 async function startRound() {
-        await resetTurnState();
     // stop existing countdown
     clearInterval(countdownInterval);
     timeLeft = buzzTime;
     mode = "buzz";
 
     await setBuzzerState({
-        enableBuzzer: false,  // stays locked until timer starts
+        enableBuzzer: true,  // stays locked until timer starts
         buzzedDevice: "",
         buzzedTeam: "",
         answeringTeam: "",
