@@ -385,10 +385,22 @@ async function submitAnswer() {
         if (document.getElementById("answerArea")) {
             document.getElementById("answerArea").style.display = "none";
         }
+
+        // 🛑 stop everything once an answer is submitted
+        stopAllTimersAndSounds();
+
         clearInterval(answerTimerInterval);
         answerTimerInterval = null;
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+
+        // Optional: freeze circle display to prevent more ticks
+        if (document.getElementById("circleTime")) {
+            document.getElementById("circleTime").textContent = "⏳ Submitted";
+        }
     }
 }
+
 
 
 // ================= ANSWER TIMER & EVALUATION =================
@@ -653,35 +665,32 @@ function registerTeamBuzzerUI() {
         const team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // Normal buzzing: any active (non-out) team when buzzer is enabled
-        const canNormal = enable && !data.buzzedDevice && !outs.includes(team);
+        // Normal buzzing (only when explicitly enabled by admin Start Buzz)
+        const canNormal =
+            enable &&
+            !data.buzzedDevice &&
+            !outs.includes(team) &&
+            !stealMode; // 🛑 block if in steal mode or idle
 
-        // Steal buzzing:
-        // - Must be in steal mode
-        // - Must not be OUT
-        // - No one has buzzed yet
-        // - Either no specific stealTeam set (2 teams left), OR this team is the designated stealTeam
+        // Steal buzzing
         const canSteal =
             stealMode &&
             !data.buzzedDevice &&
             !outs.includes(team) &&
             (data.stealTeam === "" || data.stealTeam === team);
 
-        // Enable/disable the buzzer button
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
 
-        // Show answer area ONLY if this device is the one that buzzed
+        // Answer area only for the answering device
         const area = document.getElementById("answerArea");
         if (area) {
-            if (data.answeringDevice === DEVICE_ID) {
-                area.style.display = "block";
-            } else {
-                area.style.display = "none";
-            }
+            area.style.display =
+                data.answeringDevice === DEVICE_ID ? "block" : "none";
         }
     });
 }
+
 
 
 
