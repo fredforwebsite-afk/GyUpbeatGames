@@ -1,4 +1,3 @@
-// script.js
 // ================= FIREBASE SETUP =================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import {
@@ -8,11 +7,13 @@ import {
     setDoc,
     updateDoc,
     onSnapshot,
+    arrayUnion,
+    arrayRemove
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
 // Firebase config (replace with your project’s config)
 const firebaseConfig = {
-    apiKey: "AIzaSyADxgFTvu0iycYC_ano36TFclPSh4YfqzE",
+    apiKey: "AIzaSyADxgFTvu0iycYC_ano36TFclPSh4YfqE",
     authDomain: "gygames-fafcb.firebaseapp.com",
     databaseURL: "https://gygames-fafcb-default-rtdb.firebaseio.com",
     projectId: "gygames-fafcb",
@@ -26,9 +27,57 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// ================= DEVICE + TEAM JOIN LOGIC =================
+// Each browser/device gets a persistent deviceId in sessionStorage
+function getOrCreateDeviceId() {
+    let id = sessionStorage.getItem("deviceId");
+    if (!id) {
+        // Use crypto.randomUUID if available, otherwise fallback
+        id = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : 'dev-' + Date.now() + '-' + Math.floor(Math.random()*1e6);
+        sessionStorage.setItem("deviceId", id);
+    }
+    return id;
+}
+const deviceId = getOrCreateDeviceId();
 
+// Join limit per team
+const MAX_DEVICES_PER_TEAM = 15;
 
-// ================= VARIABLES =================
+async function getTeamDevicesDoc() {
+    const snap = await getDoc(doc(db, "game", "teamDevices"));
+    return snap.exists() ? snap.data() : {};
+}
+
+async function joinTeamDevices(team) {
+    const ref = doc(db, "game", "teamDevices");
+    const data = await getTeamDevicesDoc();
+    const arr = Array.isArray(data[team]) ? data[team] : [];
+    if (arr.includes(deviceId)) return true; // already joined
+    if (arr.length >= MAX_DEVICES_PER_TEAM) {
+        return false; // cannot join, limit reached
+    }
+    // merge: append deviceId
+    await setDoc(ref, { [team]: [...arr, deviceId] }, { merge: true });
+    return true;
+}
+
+async function leaveTeamDevices(team) {
+    const ref = doc(db, "game", "teamDevices");
+    const data = await getTeamDevicesDoc();
+    const arr = Array.isArray(data[team]) ? data[team] : [];
+    const filtered = arr.filter(d => d !== deviceId);
+    await setDoc(ref, { [team]: filtered }, { merge: true });
+}
+
+// Ensure we remove on unload
+window.addEventListener("beforeunload", async () => {
+    const team = sessionStorage.getItem("team");
+    if (team) {
+        try { await leaveTeamDevices(team); } catch(_) {}
+    }
+});
+
+// ================= VARIABLES (unchanged mostly) =================
 let scores = { Zack: 0, Ryan: 0, Kyle: 0 };
 let currentLevel = "easy";
 let currentQIndex = 0;
@@ -44,7 +93,6 @@ let stealUsed = false;
 // snapshot unsubscribes
 let buzzerUnsub = null;
 let answersUnsub = null;
-let buzzerListenerRegistered = false;
 
 // ================= QUESTIONS =================
 const questions = {
@@ -80,7 +128,7 @@ const questions = {
     ]
 };
 
-// ----------------- HELPERS FOR FIREBASE STATE -----------------
+// ----------------- HELPERS FOR FIREBASE STATE (adjusted) -----------------
 async function loadScores() {
     const docRef = doc(db, "game", "scores");
     const snap = await getDoc(docRef);
@@ -107,7 +155,7 @@ async function setOutTeams(arr) {
     await setDoc(docRef, { teams: arr }, { merge: true });
 }
 
-// unify buzzer state: enableBuzzer, buzzed, answeringTeam, stealMode
+// unify buzzer state -> now uses device fields like buzzedDevice and answeringDevice
 async function getBuzzerState() {
     const snap = await getDoc(doc(db, "game", "buzzer"));
     return snap.exists() ? snap.data() : {};
@@ -117,7 +165,7 @@ async function setBuzzerState(obj) {
     await setDoc(doc(db, "game", "buzzer"), obj, { merge: true });
 }
 
-// single resetTurnState (merged)
+// Updated resetTurnState to clear device-specific answers too
 async function resetTurnState() {
     stealUsed = false;
     clearInterval(answerTimerInterval);
@@ -125,19 +173,20 @@ async function resetTurnState() {
 
     // reset buzzer and outTeams
     await setBuzzerState({
-        buzzed: "",
+        buzzedDevice: "",
+        buzzedTeam: "",
         enableBuzzer: false,
+        answeringDevice: "",
         answeringTeam: "",
         stealMode: false
     });
     await setOutTeams([]);
 
-    // clear answers for safety (keeps doc but empties teams)
+    // clear answers for safety (we keep doc but reset submitted fields)
     await setDoc(doc(db, "game", "answers"), {
-        Zack: "",
-        Ryan: "",
-        Kyle: "",
-        submittedAnswer: ""
+        submittedDevice: "",
+        submittedTeam: "",
+        // NOTE: device-specific answers will be removed by admin flow if desired
     }, { merge: true });
 
     // UI resets
@@ -146,15 +195,12 @@ async function resetTurnState() {
     if (document.getElementById("stealNotice")) document.getElementById("stealNotice").innerText = "";
 }
 
-
 function stopAllTimersAndSounds() {
-    // stop timers
     clearInterval(countdownInterval);
     clearInterval(answerTimerInterval);
     countdownInterval = null;
     answerTimerInterval = null;
 
-    // stop all sounds
     ["beepSound", "beepHighSound", "timesUpSound", "buzzSound", "correctSound", "wrongSound"].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -164,12 +210,8 @@ function stopAllTimersAndSounds() {
     });
 }
 
-
-// ================= ADMIN FUNCTIONS =================
-let buzzerSnapshotCleanup = null;
-
+// ================= ADMIN FUNCTIONS (startRound unchanged except uses new buzzer fields) =================
 async function startRound() {
-    // stop existing countdown
     clearInterval(countdownInterval);
     timeLeft = buzzTime;
     mode = "buzz";
@@ -177,7 +219,9 @@ async function startRound() {
     await resetTurnState();
     await setBuzzerState({
         enableBuzzer: true,
-        buzzed: "",
+        buzzedDevice: "",
+        buzzedTeam: "",
+        answeringDevice: "",
         answeringTeam: "",
         stealMode: false
     });
@@ -187,16 +231,11 @@ async function startRound() {
     if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "None yet";
     if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
 
-    // register a single buzzer snapshot listener (unsub first if already registered)
-    if (buzzerUnsub) {
-        buzzerUnsub();
-        buzzerUnsub = null;
-    }
+    if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
     buzzerUnsub = onSnapshot(doc(db, "game", "buzzer"), (snap) => {
         const data = snap.exists() ? snap.data() : {};
-        if (data.buzzed && data.buzzed !== "") {
-            // buzz happened
-            stopOnBuzz(data.buzzed).catch(console.error);
+        if (data.buzzedDevice && data.buzzedDevice !== "") {
+            stopOnBuzzDevice(data.buzzedDevice, data.buzzedTeam).catch(console.error);
         }
     });
 
@@ -228,7 +267,6 @@ function runTimer() {
                     `<button style="background:orange;padding:8px 16px;" onclick="startRound()">🔁 Repeat Buzz</button>`;
             }
         }
-
     } else if (mode === "answer") {
         updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
 
@@ -242,10 +280,10 @@ function runTimer() {
             }
             playSound("timesUpSound");
 
-            // 🟢 FIX: mark answering team as OUT and enable buzzer for remaining teams
             getBuzzerState().then(state => {
                 const team = state.answeringTeam;
-                if (team) {
+                const device = state.answeringDevice;
+                if (team && device) {
                     handleTeamWrongOrTimeout(team, "TIME UP").catch(console.error);
                 }
             });
@@ -253,24 +291,23 @@ function runTimer() {
     }
 }
 
-
-// 🛑 If a team buzzes early
-async function stopOnBuzz(team) {
-    if (!team) return;
+// When a device buzzes: set answeringDevice + answeringTeam; only that device sees answer box
+async function stopOnBuzzDevice(device, team) {
+    if (!device) return;
 
     if (document.getElementById("firstBuzz"))
-        document.getElementById("firstBuzz").textContent = team;
+        document.getElementById("firstBuzz").textContent = team + " (" + device + ")";
 
     await setBuzzerState({
+        answeringDevice: device,
         answeringTeam: team,
         enableBuzzer: false
     });
 
-    switchToAnswer(team);
+    switchToAnswer(device, team);
 }
 
-// 🔄 Switch from buzz mode to answer mode
-function switchToAnswer(team) {
+function switchToAnswer(device, team) {
     clearInterval(countdownInterval);
     mode = "answer";
     timeLeft = answerTime;
@@ -280,9 +317,11 @@ function switchToAnswer(team) {
 
     // start answer countdown
     countdownInterval = setInterval(runTimer, 1000);
+
+    // start admin answer timer as well
+    startAnswerTimerForDevice(device, team);
 }
 
-// 🎨 Update circle progress (SVG circle expected)
 function updateCircle(time, color, max) {
     const circle = document.getElementById("circleProgress");
     if (!circle) return;
@@ -295,7 +334,6 @@ function updateCircle(time, color, max) {
     circle.style.stroke = color;
 }
 
-// 🔊 Sound helper
 function playSound(id) {
     const el = document.getElementById(id);
     if (el) {
@@ -310,7 +348,9 @@ async function resetGame() {
     updateScores();
     await setBuzzerState({
         enableBuzzer: false,
-        buzzed: "",
+        buzzedDevice: "",
+        buzzedTeam: "",
+        answeringDevice: "",
         answeringTeam: "",
         stealMode: false
     });
@@ -334,52 +374,69 @@ function highlightScore(team) {
     }
 }
 
-// ================= TEAM FUNCTIONS =================
-function selectTeam(team) {
+// ================= TEAM SELECT / JOIN =================
+async function selectTeam(team) {
+    // Attempt to join teamDevices list (enforce limit)
+    const ok = await joinTeamDevices(team);
+    if (!ok) {
+        alert(`${team} already has maximum (${MAX_DEVICES_PER_TEAM}) devices joined. Try another team or ask admin to increase limit.`);
+        return;
+    }
+
     sessionStorage.setItem("team", team);
     if (document.getElementById("teamSelect")) document.getElementById("teamSelect").style.display = "none";
     if (document.getElementById("buzzerArea")) document.getElementById("buzzerArea").style.display = "block";
-    if (document.getElementById("teamName")) document.getElementById("teamName").innerText = "You are " + team;
+    if (document.getElementById("teamName")) document.getElementById("teamName").innerText = "You are " + team + " (" + deviceId + ")";
 }
 
+// call leave on explicit leave (optional)
+async function leaveTeam() {
+    const team = sessionStorage.getItem("team");
+    if (team) {
+        await leaveTeamDevices(team);
+        sessionStorage.removeItem("team");
+        if (document.getElementById("teamSelect")) document.getElementById("teamSelect").style.display = "block";
+        if (document.getElementById("buzzerArea")) document.getElementById("buzzerArea").style.display = "none";
+    }
+}
+
+// ================= SUBMIT ANSWER (device-level) =================
 async function submitAnswer() {
     let team = sessionStorage.getItem("team");
     let ansEl = document.getElementById("teamAnswer");
     let ans = ansEl ? ansEl.value : "";
     if (team && ans) {
+        // Save answer keyed by deviceId and also mark submittedDevice and submittedTeam
         await setDoc(doc(db, "game", "answers"), {
-            [team]: ans,
-            submittedAnswer: ans,
-            level: currentLevel, // 🟢 save current level
-            index: currentQIndex // 🟢 save current index
+            [deviceId]: ans,
+            submittedDevice: deviceId,
+            submittedTeam: team,
+            level: currentLevel,
+            index: currentQIndex
         }, { merge: true });
 
         if (document.getElementById("answerArea")) {
             document.getElementById("answerArea").style.display = "none";
         }
-        clearInterval(answerTimerInterval); // stop admin answer timer loop if running
+        clearInterval(answerTimerInterval);
     }
 }
 
-
-
-// ================= ANSWER TIMER & EVALUATION =================
-function startAnswerTimer(team) {
-    // will show on admin UI
+// ================= ANSWER TIMER & EVALUATION (admin) =================
+function startAnswerTimerForDevice(device, team) {
     let sec = answerTime;
     if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
 
     clearInterval(answerTimerInterval);
     answerTimerInterval = setInterval(async() => {
-        // Check answers doc for this team's submission
         const snap = await getDoc(doc(db, "game", "answers"));
         const data = snap.exists() ? snap.data() : {};
-        const ans = data[team] || "";
+        const ans = data[device] || "";
 
         if (ans && ans.trim() !== "") {
-            // admin will evaluate via evaluateAnswer flow (answers snapshot handled below)
             clearInterval(answerTimerInterval);
             answerTimerInterval = null;
+            // evaluate will be triggered by answers listener
             return;
         }
 
@@ -398,9 +455,8 @@ function startAnswerTimer(team) {
     }, 1000);
 }
 
-// central answer evaluation (called when answers doc changes)
-async function evaluateAnswer(team, ans) {
-    if (!team || !ans) return;
+async function evaluateAnswer(device, ans) {
+    if (!device || !ans) return;
 
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "📝 " + ans;
@@ -412,10 +468,10 @@ async function evaluateAnswer(team, ans) {
     const answersData = snap.exists() ? snap.data() : {};
     const lvl = answersData.level || currentLevel;
     const idx = answersData.index ?? currentQIndex;
+    const team = answersData.submittedTeam || (await getBuzzerState()).answeringTeam;
 
     const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
 
-    // ✅ Case 1: Correct answer
     if (ans.trim().toLowerCase() === correctAns) {
         stopAllTimersAndSounds();
         playSound("correctSound");
@@ -427,7 +483,6 @@ async function evaluateAnswer(team, ans) {
         updateScores();
         highlightScore(team);
 
-        // stop countdown
         clearInterval(countdownInterval);
         timeLeft = 0;
         if (document.getElementById("circleTime")) {
@@ -435,34 +490,24 @@ async function evaluateAnswer(team, ans) {
         }
         updateCircle(0, "lime", answerTime);
 
-        // mark lang as correct (no reveal)
         if (document.getElementById("submittedAnswer")) {
             document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT!";
         }
 
-        // lock question and cleanup
         lockQuestion(lvl, idx);
-        await setBuzzerState({ buzzed: "" });
+        await setBuzzerState({ buzzedDevice: "", answeringDevice: "", stealMode: false, answeringTeam: "" });
+        // clear device answer
         await setDoc(doc(db, "game", "answers"), {
-            [team]: ""
+            [device]: ""
         }, { merge: true });
-        await setBuzzerState({ stealMode: false });
         await setOutTeams([]);
-    }
-
-    // ❌ Case 2: Wrong answer
-    else {
+    } else {
         playSound("wrongSound");
         await handleTeamWrongOrTimeout(team, "WRONG");
-        // ❌ wag mag-reveal ng tamang sagot dito
     }
 }
 
-
-
-
-// ================= WRONG / TIMEOUT / STEAL =================
-// ================= WRONG / TIMEOUT / STEAL =================
+// ================= WRONG / TIMEOUT / STEAL (use team-level logic unchanged mostly) =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
@@ -472,28 +517,27 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (!outs.includes(team)) outs.push(team);
     await setOutTeams(outs);
 
-    // clear the buzz and that team's answer
-    await setBuzzerState({ buzzed: "" });
-    await setDoc(doc(db, "game", "answers"), {
-        [team]: ""
-    }, { merge: true });
+    // clear buzzer and device answers
+    await setBuzzerState({ buzzedDevice: "", answeringDevice: "", answeringTeam: "" });
+    // clear any device answers for that team (optional admin cleanup)
+    // NOTE: our answers doc keys are deviceIds; no easy reverse lookup here, admin may clear specific fields if needed
 
     const allTeams = ["Zack", "Ryan", "Kyle"];
     const remaining = allTeams.filter(t => !outs.includes(t));
 
-    // 🛑 Case 1: lahat ng 3 teams OUT → reveal answer
     if (remaining.length === 0) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🟡 Case 2: isa na lang natira → siya lang ang naka-enable buzzer
     if (remaining.length === 1) {
         const lastTeam = remaining[0];
         await setBuzzerState({
-            enableBuzzer: true, // siya lang ang pwede mag-buzz
-            buzzed: "",
+            enableBuzzer: true,
+            buzzedDevice: "",
+            buzzedTeam: "",
+            answeringDevice: "",
             answeringTeam: "",
             stealMode: true
         });
@@ -503,7 +547,6 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
                 "🚨 FINAL CHANCE: " + lastTeam + " must buzz to answer!";
         }
 
-        // reset countdown for STEAL buzz
         clearInterval(countdownInterval);
         mode = "buzz";
         timeLeft = buzzTime;
@@ -513,13 +556,12 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         countdownInterval = setInterval(runTimer, 1000);
 
         return;
-    }
-
-    // 🟢 Case 3: dalawa pa natitira → STEAL MODE normal
-    else if (remaining.length === 2) {
+    } else if (remaining.length === 2) {
         await setBuzzerState({
             enableBuzzer: true,
-            buzzed: "",
+            buzzedDevice: "",
+            buzzedTeam: "",
+            answeringDevice: "",
             answeringTeam: "",
             stealMode: true
         });
@@ -529,7 +571,6 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         }
     }
 
-    // reset countdown for STEAL buzz (2 remaining teams)
     clearInterval(countdownInterval);
     mode = "buzz";
     timeLeft = buzzTime;
@@ -539,45 +580,35 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     countdownInterval = setInterval(runTimer, 1000);
 }
 
-
-
-
-
 async function revealCorrectAnswerAndLock() {
     const correct = questions[currentLevel][currentQIndex].a;
     playSound("wrongSound");
     stopAllTimersAndSounds();
 
-    // ✅ Alert pa rin para sure admin makakita
     alert("No team answered correctly. Correct answer is: " + correct);
 
-    // ✅ Player-side submitted answer box
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "💡 Correct Answer: " + correct;
     }
-
-    // ✅ Admin-side reveal box
     if (document.getElementById("revealAnswer")) {
         document.getElementById("revealAnswer").innerText = "✔ Correct Answer: " + correct;
     }
 
-    // Lock question at reset states
     lockQuestion(currentLevel, currentQIndex);
     stopAllTimersAndSounds();
     await setBuzzerState({
         enableBuzzer: false,
-        buzzed: "",
+        buzzedDevice: "",
+        buzzedTeam: "",
+        answeringDevice: "",
         answeringTeam: "",
         stealMode: false
     });
-    stopAllTimersAndSounds();
     await setOutTeams([]);
     clearInterval(answerTimerInterval);
     answerTimerInterval = null;
 }
 
-
-// single-use steal mode starter
 async function startStealMode(team) {
     if (stealUsed) return;
     stealUsed = true;
@@ -588,45 +619,51 @@ async function startStealMode(team) {
 }
 
 // ================= AUTO LISTENER FOR ANSWERS (real-time) =================
-// Listen to answers doc changes to instantly evaluate answers when submitted
 function registerAnswersListener() {
     if (answersUnsub) answersUnsub();
     answersUnsub = onSnapshot(doc(db, "game", "answers"), (snap) => {
         if (!snap.exists()) return;
         const data = snap.data();
-        // find which team has a non-empty answer recently
-        ["Zack", "Ryan", "Kyle"].forEach(team => {
-            const ans = (data[team] || "").trim();
-            if (ans) {
-                evaluateAnswer(team, ans).catch(console.error);
-            }
-        });
+        // If admin saved submittedDevice, evaluate that device's answer
+        const submittedDevice = data.submittedDevice || "";
+        if (submittedDevice && (data[submittedDevice] || "").trim() !== "") {
+            const ans = data[submittedDevice];
+            evaluateAnswer(submittedDevice, ans).catch(console.error);
+        } else {
+            // Fallback: look for any deviceId key with non-empty value and evaluate (useful in some flows)
+            Object.keys(data).forEach(key => {
+                if (key === "submittedDevice" || key === "submittedTeam" || key === "level" || key === "index") return;
+                const ans = (data[key] || "").trim();
+                if (ans) {
+                    evaluateAnswer(key, ans).catch(console.error);
+                }
+            });
+        }
     });
 }
 
-// ================= TEAM BUZZER UI (real-time enable/disable) =================
-function registerTeamBuzzerUI() {
+// ================= TEAM BUZZER UI (device-level) =================
+async function registerTeamBuzzerUI() {
     onSnapshot(doc(db, "game", "buzzer"), async (snap) => {
         const data = snap.exists() ? snap.data() : {};
-        let enable = data.enableBuzzer;
-        let stealMode = !!data.stealMode;
-        let alreadyBuzzed = data.buzzed;
-        let team = sessionStorage.getItem("team");
+        const enable = !!data.enableBuzzer;
+        const stealMode = !!data.stealMode;
+        const alreadyBuzzedDevice = data.buzzedDevice || "";
+        const answeringDevice = data.answeringDevice || "";
+        const answeringTeam = data.answeringTeam || "";
+        const team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
-        const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
-
-        // steal: same rules, but only active if stealMode is true
-        const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
+        // device can buzz when: buzzer enabled, no buzzedDevice yet, this device's team is not out, and (if stealMode false then normal)
+        const canBuzz = enable && !alreadyBuzzedDevice && !outs.includes(team) && !!team;
 
         const btn = document.getElementById("buzzerBtn");
-        if (btn) btn.disabled = !(canNormal || canSteal);
+        if (btn) btn.disabled = !canBuzz;
 
-        // ✅ Always show answer box if this team is the answering team
+        // Show answerArea only if this device is the answeringDevice
         const area = document.getElementById("answerArea");
         if (area) {
-            if (data.answeringTeam === team) {
+            if (answeringDevice === deviceId) {
                 area.style.display = "block";
             } else {
                 area.style.display = "none";
@@ -635,15 +672,23 @@ function registerTeamBuzzerUI() {
     });
 }
 
-
-
-// attach team buzzer click handler
+// attach team buzzer click handler (device-level)
 if (document.getElementById("buzzerBtn")) {
     document.getElementById("buzzerBtn").onclick = async () => {
         let team = sessionStorage.getItem("team");
-        if (!team) return;
+        if (!team) {
+            alert("Please select a team first.");
+            return;
+        }
 
-        await setBuzzerState({ buzzed: team });
+        // write buzzedDevice and buzzedTeam; snapshot listener will call stopOnBuzzDevice
+        await setBuzzerState({
+            buzzedDevice: deviceId,
+            buzzedTeam: team,
+            // Optionally set answeringDevice here as immediate claim
+            answeringDevice: deviceId,
+            answeringTeam: team
+        });
 
         const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = true;
@@ -652,14 +697,12 @@ if (document.getElementById("buzzerBtn")) {
     };
 }
 
-
-
-// ================= QUESTION BOARD =================
+// ================= QUESTION BOARD (unchanged most of it) =================
 async function showBoard(level, btn) {
     currentLevel = level;
 
     let container = document.getElementById("questionBox");
-    if (container) container.style.display = "grid"; // show board kapag pinili na
+    if (container) container.style.display = "grid";
 
     renderBoard(level);
     await setBuzzerState({ enableBuzzer: false });
@@ -669,7 +712,6 @@ async function showBoard(level, btn) {
 
     await resetTurnState();
 }
-
 
 function renderBoard(level) {
     let container = document.getElementById("questionBox");
@@ -706,12 +748,10 @@ async function revealQuestion(index, question, element, level) {
         level
     });
 
-
     currentQIndex = index;
     await resetTurnState();
 }
 
-// Lock box after answered (UI only)
 function lockQuestion(level, index) {
     let container = document.getElementById("questionBox");
     if (!container) return;
@@ -722,7 +762,6 @@ function lockQuestion(level, index) {
     }
 }
 
-// ================= SYNC CURRENT QUESTION =================
 function registerCurrentQuestionListener() {
     onSnapshot(doc(db, "game", "currentQuestion"), (snap) => {
         if (!snap.exists()) return;
@@ -731,14 +770,12 @@ function registerCurrentQuestionListener() {
         currentLevel = data.level;
         currentQIndex = data.index;
 
-        // UI update (optional)
         if (document.getElementById("submittedAnswer")) {
             document.getElementById("submittedAnswer").innerText =
                 "⏳ Waiting for answer (" + currentLevel.toUpperCase() + ")";
         }
     });
 }
-
 
 // ================= OVERRIDES / STARTUP =================
 window.addEventListener("load", async() => {
@@ -747,24 +784,23 @@ window.addEventListener("load", async() => {
 
     registerAnswersListener();
     registerTeamBuzzerUI();
-    registerCurrentQuestionListener(); // ✅ ADD THIS
+    registerCurrentQuestionListener();
 
     await setBuzzerState({
         enableBuzzer: false,
-        buzzed: "",
+        buzzedDevice: "",
+        buzzedTeam: "",
+        answeringDevice: "",
         answeringTeam: "",
         stealMode: false
     });
 });
 
-
-
-// Unsubscribe listeners on unload
+// Unsubscribe listeners on unload (already handled above)
 window.addEventListener("beforeunload", () => {
     if (buzzerUnsub) buzzerUnsub();
     if (answersUnsub) answersUnsub();
 });
-
 
 // expose admin functions to global scope so HTML buttons work
 window.startRound = startRound;
@@ -772,7 +808,5 @@ window.showBoard = showBoard;
 window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
+window.leaveTeam = leaveTeam;
 window.startStealMode = startStealMode;
-
-
-
