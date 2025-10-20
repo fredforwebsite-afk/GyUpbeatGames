@@ -173,12 +173,37 @@ function stopAllTimersAndSounds() {
 let buzzerSnapshotCleanup = null;
 
 async function startRound() {
-    // stop existing countdown
     clearInterval(countdownInterval);
     timeLeft = buzzTime;
     mode = "buzz";
 
     await resetTurnState();
+
+    // 🟢 EASY & MEDIUM: all teams can answer right away
+    if (currentLevel === "easy" || currentLevel === "medium") {
+        await setBuzzerState({
+            enableBuzzer: true,
+            buzzed: "",
+            answeringTeam: "",
+            stealMode: false
+        });
+
+        if (document.getElementById("firstBuzz")) {
+            document.getElementById("firstBuzz").textContent = "All teams may answer!";
+        }
+        if (document.getElementById("stealNotice")) {
+            document.getElementById("stealNotice").textContent = "";
+        }
+
+        // No countdown buzz phase
+        if (document.getElementById("circleTime")) {
+            document.getElementById("circleTime").textContent = "";
+        }
+        updateCircle(0, "lime", buzzTime);
+        return;
+    }
+
+    // 🧠 HARD LEVEL: original buzzer logic
     await setBuzzerState({
         enableBuzzer: true,
         buzzed: "",
@@ -187,11 +212,14 @@ async function startRound() {
     });
 
     updateCircle(buzzTime, "lime", buzzTime);
-    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-    if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "None yet";
-    if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
+    if (document.getElementById("circleTime"))
+        document.getElementById("circleTime").textContent = timeLeft;
+    if (document.getElementById("firstBuzz"))
+        document.getElementById("firstBuzz").textContent = "None yet";
+    if (document.getElementById("stealNotice"))
+        document.getElementById("stealNotice").textContent = "";
 
-    // register a single buzzer snapshot listener (unsub first if already registered)
+    // keep your original buzzer listener logic
     if (buzzerUnsub) {
         buzzerUnsub();
         buzzerUnsub = null;
@@ -199,13 +227,13 @@ async function startRound() {
     buzzerUnsub = onSnapshot(doc(db, "game", "buzzer"), (snap) => {
         const data = snap.exists() ? snap.data() : {};
         if (data.buzzed && data.buzzed !== "") {
-            // buzz happened
             stopOnBuzz(data.buzzed).catch(console.error);
         }
     });
 
     countdownInterval = setInterval(runTimer, 1000);
 }
+
 
 function runTimer() {
     timeLeft--;
@@ -678,17 +706,22 @@ function registerTeamBuzzerUI() {
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
-        const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
+        const btn = document.getElementById("buzzerBtn");
+        const area = document.getElementById("answerArea");
 
-        // steal: same rules, but only active if stealMode is true
+        // 🟢 EASY & MEDIUM: always enable buzzer & show answer input
+        if (currentLevel === "easy" || currentLevel === "medium") {
+            if (btn) btn.disabled = false;
+            if (area) area.style.display = "block";
+            return;
+        }
+
+        // 🧠 HARD LEVEL: normal logic
+        const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
         const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
 
-        const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
 
-        // ✅ Always show answer box if this team is the answering team
-        const area = document.getElementById("answerArea");
         if (area) {
             if (data.answeringTeam === team) {
                 area.style.display = "block";
@@ -698,6 +731,7 @@ function registerTeamBuzzerUI() {
         }
     });
 }
+
 
 
 
