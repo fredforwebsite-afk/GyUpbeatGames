@@ -73,14 +73,11 @@ const questions = {
         
     ],
     hard: [
-        { q: "What particle carries a negative electric charge?", a: "Electron" },
-        { q: "What is the most abundant gas in Earth's atmosphere?", a: "Nitrogen" },
-        { q: "What force keeps planets in orbit around the Sun?", a: "Gravity" },
-        { q: "Which part of the atom has no electric charge?", a: "Neutron" },
-        { q: "Which blood type is known as the universal donor?", a: "O negative" },
-        { q: "Which organ in the human body produces insulin?", a: "Pancreas" },
-        { q: "What is the largest planet in our solar system?", a: "Jupiter" },
-        { q: "Who proposed the three laws of motion?", a: "Isaac Newton" }
+        { q: "Battle of Bull Run was part of which American war?", a: "American Civil War" },
+        { q: "What social networking giant was established in 2004?", a: "Facebook" },
+        { q: "Who was the first African American President of the United States?", a: "Barack Obama" },
+        { q: "Which state is known as the “Empire State”?", a: "New York" },
+        { q: "Which state is called the Sunshine State?", a: "Florida" },
     ]
 };
 
@@ -931,4 +928,5 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
