@@ -1,5 +1,9 @@
-// script-updated.js
-// ================= FIREBASE SETUP =================
+// script-updated.js (FIXED)
+// Fixes:
+// 1. Prevents duplicate score addition for first team
+// 2. Corrects score percentages (2nd = 50%, 3rd = 25%)
+// 3. Adds per-question award protection
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import {
     getFirestore,
@@ -10,7 +14,6 @@ import {
     onSnapshot,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
-// Firebase config (replace with your project’s config)
 const firebaseConfig = {
     apiKey: "AIzaSyADxgFTvu0iycYC_ano36TFclPSh4YfqzE",
     authDomain: "gygames-fafcb.firebaseapp.com",
@@ -22,28 +25,102 @@ const firebaseConfig = {
     measurementId: "G-058J8NLC43"
 };
 
-// Init Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-
-
-// ================= VARIABLES =================
 let scores = { Zack: 0, Ryan: 0, Kyle: 0 };
 let currentLevel = "easy";
 let currentQIndex = 0;
-let timerInterval = null;
-let answerTimerInterval = null;
-let countdownInterval = null;
-let timeLeft = 0;
-let mode = "buzz"; // "buzz" or "answer"
+let mode = "buzz";
 let buzzTime = 10;
 let answerTime = 20;
+let countdownInterval = null;
 let stealUsed = false;
-
-// snapshot unsubscribes
 let buzzerUnsub = null;
 let answersUnsub = null;
+
+async function loadScores() {
+    const ref = doc(db, "game", "scores");
+    const snap = await getDoc(ref);
+    if (snap.exists()) scores = snap.data();
+    else await setDoc(ref, scores);
+}
+async function saveScores() { await setDoc(doc(db, "game", "scores"), scores, { merge: true }); }
+function updateScores() {
+    ["Zack", "Ryan", "Kyle"].forEach(t => {
+        const el = document.getElementById("score" + t);
+        if (el) el.innerText = scores[t];
+    });
+}
+function highlightScore(team) {
+    let td = document.getElementById("score" + team);
+    if (td) { td.classList.add("highlight"); setTimeout(() => td.classList.remove("highlight"), 1000); }
+}
+
+async function evaluateAnswer(team, ans) {
+    if (!team || !ans) return;
+
+    const answersSnap = await getDoc(doc(db, "game", "answers"));
+    const data = answersSnap.exists() ? answersSnap.data() : {};
+    const lvl = data.level || currentLevel;
+    const idx = data.index ?? currentQIndex;
+    const correctAns = (questions[lvl][idx].a || '').trim().toLowerCase();
+
+    const teamAnswer = ans.trim().toLowerCase();
+    const correct = teamAnswer === correctAns;
+
+    if (lvl === 'easy' || lvl === 'medium') {
+        const orderRef = doc(db, "game", "correctOrder");
+        const orderSnap = await getDoc(orderRef);
+        const orderData = orderSnap.exists() ? orderSnap.data().order || [] : [];
+
+        if (correct) {
+            if (!orderData.includes(team)) {
+                orderData.push(team);
+                await setDoc(orderRef, { order: orderData }, { merge: true });
+            }
+
+            const rank = orderData.indexOf(team) + 1;
+            const basePoints = lvl === 'easy' ? 100 : 300;
+            let multiplier = 1;
+            if (rank === 2) multiplier = 0.5; // 2nd = 50%
+            else if (rank === 3) multiplier = 0.25; // 3rd = 25%
+            const points = Math.floor(basePoints * multiplier);
+
+            const qKey = `${lvl}_${idx}`;
+            const awardedRef = doc(db, "game", `awarded_${team}`);
+            const awardedSnap = await getDoc(awardedRef);
+            const awardedData = awardedSnap.exists() ? awardedSnap.data() : {};
+
+            if (!awardedData[qKey]) {
+                scores[team] = (scores[team] || 0) + points;
+                await saveScores();
+                updateScores();
+                highlightScore(team);
+                await setDoc(awardedRef, { [qKey]: true }, { merge: true });
+            }
+
+            stopAllTimersAndSounds();
+            playSound("correctSound");
+            if (document.getElementById("submittedAnswer")) {
+                document.getElementById("submittedAnswer").innerText = `✅ ${team} is CORRECT! (+${points})`;
+            }
+        } else {
+            playSound("wrongSound");
+            await handleTeamWrongOrTimeout(team, "WRONG");
+        }
+    }
+}
+
+// (Rest of script remains same)
+
+window.addEventListener("load", async () => {
+    await loadScores();
+    updateScores();
+    registerAnswersListener();
+    registerTeamBuzzerUI();
+    registerCurrentQuestionListener();
+});
 let buzzerListenerRegistered = false;
 
 // ================= QUESTIONS =================
@@ -955,3 +1032,4 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
