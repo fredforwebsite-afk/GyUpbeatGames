@@ -168,6 +168,16 @@ function stopAllTimersAndSounds() {
     });
 }
 
+// ---------- helper: check if all teams submitted ----------
+async function allTeamsSubmitted() {
+    const snap = await getDoc(doc(db, "game", "answers"));
+    const data = snap.exists() ? snap.data() : {};
+    const allTeams = ["Zack", "Ryan", "Kyle"];
+    // consider a team submitted if it has a non-empty string value OR we have a timestamp field for them
+    const submittedCount = allTeams.filter(t => (data[t] && String(data[t]).trim() !== "") || data[`${t}_ts`]).length;
+    return submittedCount === allTeams.length;
+}
+
 
 
 // ================= ADMIN FUNCTIONS =================
