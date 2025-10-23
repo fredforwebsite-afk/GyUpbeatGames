@@ -213,8 +213,8 @@ async function startRound() {
 
         countdownInterval = setInterval(runTimer, 1000);
     } else {
-        // EASY / MEDIUM: open simultaneous team-answer mode
-        mode = "buzz"; // keep teams clickable for submissions
+        // EASY / MEDIUM: all teams can answer within 20s
+        mode = "buzz"; // keep team buttons active
         timeLeft = answerTime; // 20 seconds
 
         await setBuzzerState({
@@ -224,7 +224,7 @@ async function startRound() {
             stealMode: false
         });
 
-        // clear correctOrder
+        // reset correct order
         await setDoc(doc(db, "game", "correctOrder"), { order: [] });
 
         updateCircle(answerTime, "lime", answerTime);
@@ -237,14 +237,15 @@ async function startRound() {
 
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
-        // ✅ Start countdown: stop only if all 3 teams have answered OR when time's up
+        // ✅ timer logic: only stop early when all 3 teams have answered
         countdownInterval = setInterval(async () => {
             timeLeft--;
+
             if (document.getElementById("circleTime"))
                 document.getElementById("circleTime").textContent = timeLeft;
             updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
-            // Check if all 3 teams have answered
+            // check how many teams have submitted an answer
             const snap = await getDoc(doc(db, "game", "answers"));
             const data = snap.exists() ? snap.data() : {};
             const allTeams = ["Zack", "Ryan", "Kyle"];
@@ -252,8 +253,8 @@ async function startRound() {
                 t => data[t] && data[t].trim() !== ""
             ).length;
 
+            // ✅ only stop early when ALL THREE have answered
             if (answeredCount === allTeams.length) {
-                // ✅ All teams answered — stop early
                 clearInterval(countdownInterval);
                 countdownInterval = null;
                 stopAllTimersAndSounds();
@@ -261,8 +262,8 @@ async function startRound() {
                 return;
             }
 
+            // stop normally when time runs out
             if (timeLeft <= 0) {
-                // ✅ Time’s up — finalize
                 clearInterval(countdownInterval);
                 countdownInterval = null;
                 stopAllTimersAndSounds();
@@ -271,6 +272,7 @@ async function startRound() {
             }
         }, 1000);
     }
+
 }
 
 
