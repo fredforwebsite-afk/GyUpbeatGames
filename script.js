@@ -73,7 +73,8 @@ const questions = {
         { q: "The United Nations is divided into how many administrtative bodies?", a: "6" },
         { q: "What is the nationality of the present secretary General of UN?", a: "Portugal" },
         { q: "After which major war was the United Nations Charter established?", a: "World War II" },
-        { q: "What is the name of the document which sets out the main aims of the UN and the rights and obligations of each member state?", a: "The United Nations Charter" }
+        { q: "What is the name of the document which sets out the main aims of the UN and the rights and obligations of each member state?", a: ["The United Nations Charter", "United Nations Charter", "UN Charter"] }
+
         
     ],
     hard: [
@@ -941,6 +942,7 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
 
