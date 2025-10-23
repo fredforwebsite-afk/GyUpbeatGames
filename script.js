@@ -495,11 +495,6 @@ function startAnswerTimer(team) {
     }, 1000);
 }
 
-
-if (window.lastEvaluated && window.lastEvaluated[team] === ans) return;
-window.lastEvaluated = window.lastEvaluated || {};
-window.lastEvaluated[team] = ans;
-
 // central answer evaluation (called when answers doc changes)
 // ================= ANSWER EVALUATION (FIXED) =================
 async function evaluateAnswer(team, ans) {
@@ -544,8 +539,8 @@ async function evaluateAnswer(team, ans) {
             let awarded = 0;
 
             if (position === 0) awarded = basePoints;                 // 1st
-            else if (position === 1) awarded = Math.round(basePoints * 0.75); // 2nd (25%)
-            else if (position === 2) awarded = Math.round(basePoints * 0.50);  // 3rd (50%)
+            else if (position === 1) awarded = Math.round(basePoints * 0.25); // 2nd (25%)
+            else if (position === 2) awarded = Math.round(basePoints * 0.5);  // 3rd (50%)
 
             // Apply score only once
             scores[team] = (scores[team] || 0) + awarded;
@@ -615,6 +610,7 @@ async function evaluateAnswer(team, ans) {
     // Clear after evaluation
     await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
 }
+
 
 
 // ================= WRONG / TIMEOUT / STEAL =================
@@ -795,6 +791,7 @@ function registerAnswersListener() {
         }
     });
 }
+
 
 // ================= TEAM BUZZER UI (real-time enable/disable) =================
 function registerTeamBuzzerUI() {
