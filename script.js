@@ -538,12 +538,12 @@ async function evaluateAnswer(team, ans) {
                 await setDoc(orderDoc, { order: orderData }, { merge: true });
             }
 
-            const basePoints = lvl === "easy" ? 100 : 300;
+            const basePoints = lvl === "easy" ? 5 : 10;
             const position = orderData.indexOf(team);
             let awarded = 0;
             if (position === 0) awarded = basePoints;
-            else if (position === 1) awarded = Math.round(basePoints * 0.75);
-            else if (position === 2) awarded = Math.round(basePoints * 0.50);
+            else if (position === 1) awarded = Math.round(basePoints * 0.6);
+            else if (position === 2) awarded = Math.round(basePoints * 0.4);
 
             scores[team] = (scores[team] || 0) + awarded;
             await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
@@ -575,7 +575,7 @@ async function evaluateAnswer(team, ans) {
     if (correct) {
         stopAllTimersAndSounds();
         playSound("correctSound");
-        const points = 500;
+        const points = 20;
         scores[team] = (scores[team] || 0) + points;
         await saveScores();
         updateScores();
@@ -585,7 +585,7 @@ async function evaluateAnswer(team, ans) {
         if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "0";
         updateCircle(0, "lime", answerTime);
         if (document.getElementById("submittedAnswer"))
-            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT! (+500)";
+            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT! (+20)";
         lockQuestion(lvl, idx);
         await setBuzzerState({ buzzed: "", stealMode: false });
         await setOutTeams([]);
@@ -928,5 +928,6 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
