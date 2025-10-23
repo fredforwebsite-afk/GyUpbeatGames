@@ -60,7 +60,7 @@ const questions = {
         { q: "Guess the country flag:", a: "Malaysia", img: "https://upload.wikimedia.org/wikipedia/commons/6/66/Flag_of_Malaysia.svg" },
         { q: "Guess the country flag:", a: ["United Kingdom", "UK"], img: "https://upload.wikimedia.org/wikipedia/commons/8/83/Flag_of_the_United_Kingdom_%283-5%29.svg" },
         { q: "Guess the country flag:", a: "Israel", img: "https://upload.wikimedia.org/wikipedia/commons/d/d4/Flag_of_Israel.svg" },
-       { q: "Guess the country flag:", a: ["United States", "USA"], img: "https://upload.wikimedia.org/wikipedia/commons/f/f5/Flag_of_the_United_States_%281912-1959%29.svg" }
+       { q: "Guess the country flag:", a: ["United States", "USA", "US", "United States of America"], img: "https://upload.wikimedia.org/wikipedia/en/a/a4/Flag_of_the_United_States.svg" }
 
     ],
     medium: [
@@ -941,6 +941,7 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
 
