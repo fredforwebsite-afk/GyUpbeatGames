@@ -237,39 +237,47 @@ async function startRound() {
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
         // start a countdown for the whole open-answer window (20s)
-// Track number of teams that have submitted
+// ================= NEW LOGIC =================
+// start a countdown for the open-answer window (20s)
+// but stop early if ALL 3 teams have submitted
+
 let submittedTeams = new Set();
 
-// Listen to answer submissions
-const answersRef = collection(db, "game", "answers");
-const answersUnsub = onSnapshot(answersRef, (snapshot) => {
+// watch for submissions in real time
+if (answersUnsub) answersUnsub(); // clean any previous listener
+answersUnsub = onSnapshot(doc(db, "game", "answers"), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
     submittedTeams.clear();
-    snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.submitted) submittedTeams.add(data.teamId);
+
+    // check each team
+    ["Zack", "Ryan", "Kyle"].forEach(team => {
+        if (data[team] && data[team].trim() !== "") {
+            submittedTeams.add(team);
+        }
     });
 
-    // Stop timer only when 3 teams have submitted
-    if (submittedTeams.size >= 3) {
+    // if all 3 teams submitted, end early
+    if (submittedTeams.size === 3) {
         clearInterval(countdownInterval);
         countdownInterval = null;
-        answersUnsub(); // stop listening
+        if (answersUnsub) answersUnsub();
         stopAllTimersAndSounds();
         finalizeEasyMediumRound().catch(console.error);
     }
 });
 
-// Continue countdown as usual
+// countdown still runs normally (in case some teams don't submit)
 countdownInterval = setInterval(() => {
     timeLeft--;
-    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+    if (document.getElementById("circleTime"))
+        document.getElementById("circleTime").textContent = timeLeft;
     updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
-    // Timer ends normally if time runs out before 3 teams submit
     if (timeLeft <= 0) {
         clearInterval(countdownInterval);
         countdownInterval = null;
-        answersUnsub(); // stop listening
+        if (answersUnsub) answersUnsub();
         stopAllTimersAndSounds();
         playSound("timesUpSound");
         finalizeEasyMediumRound().catch(console.error);
