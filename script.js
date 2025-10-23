@@ -212,9 +212,10 @@ async function startRound() {
 
         countdownInterval = setInterval(runTimer, 1000);
     } else {
-        // EASY / MEDIUM ROUND — open answer for all teams, 20s max
-        mode = "open";
-        timeLeft = answerTime; // 20 seconds
+        // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
+        // Use the ANSWER window (20s) for the circle timer so all teams have 20s to submit.
+        mode = "open"; // informational only
+        timeLeft = answerTime; // 20 seconds (uses existing answerTime variable)
 
         await setBuzzerState({
             enableBuzzer: true,
@@ -223,20 +224,19 @@ async function startRound() {
             stealMode: false
         });
 
-        // clear previous correct order
+        // clear correctOrder
         await setDoc(doc(db, "game", "correctOrder"), { order: [] });
 
         updateCircle(answerTime, "lime", answerTime);
-        if (document.getElementById("circleTime"))
-            document.getElementById("circleTime").textContent = timeLeft;
-        if (document.getElementById("firstBuzz"))
-            document.getElementById("firstBuzz").textContent = "Open to all teams";
-        if (document.getElementById("stealNotice"))
-            document.getElementById("stealNotice").textContent = "";
+        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "Open to all teams";
+        if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
 
+        // Ensure any previous buzzer listener is removed — team UI listens to buzzer state and will enable submit button
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
-        // ✅ countdown: stop ONLY if all 3 teams answered OR time runs out
+        // start a countdown for the whole open-answer window (20s)
+// ✅ countdown: stop ONLY if all 3 teams answered OR time runs out
         countdownInterval = setInterval(async () => {
             timeLeft--;
             if (document.getElementById("circleTime"))
@@ -270,7 +270,7 @@ async function startRound() {
             }
         }, 1000);
     }
-
+}
 
 
 async function finalizeEasyMediumRound() {
