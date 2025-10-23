@@ -857,12 +857,11 @@ function renderBoard(level) {
 async function revealQuestion(index, question, element, level) {
     if (element.classList.contains("revealed")) return;
 
-if ((level === "easy" || level === "medium") && question.img) {
-    element.innerHTML = question.q + "<br><img src='" + question.img + "' style='width:150px;margin-top:5px;'>";
-} else {
-    element.innerText = question.q;
-}
-
+    if (level === "easy" && question.img) {
+        element.innerHTML = question.q + "<br><img src='" + question.img + "' style='width:150px;margin-top:5px;'>";
+    } else {
+        element.innerText = question.q;
+    }
 
     element.classList.add("revealed");
 
