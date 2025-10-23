@@ -49,16 +49,6 @@ let buzzerListenerRegistered = false;
 // ================= QUESTIONS =================
 const questions = {
     easy: [
-        { q: "Who was the first President of the United States?", a: "George Washington" },
-        { q: "Who is known as the Father of the Philippine Revolution?", a: "Andres Bonifacio" },
-        { q: "In what year did the Philippines gain independence from Spain?", a: "1898" },
-        { q: "Who wrote the Declaration of Independence?", a: "Thomas Jefferson" },
-        { q: "What event started the American Revolution?", a: "Battles of Lexington and Concord" },
-        { q: "Who is the national hero of the Philippines?", a: "Jose Rizal" },
-        { q: "What was the first capital of the United States?", a: "Philadelphia" },
-        { q: "Who led the Katipunan during the Philippine Revolution?", a: "Andres Bonifacio" }
-    ],
-    medium: [
         { q: "Guess the country flag:", a: "japan", img: "https://upload.wikimedia.org/wikipedia/en/9/9e/Flag_of_Japan.svg" },
         { q: "Guess the country flag:", a: "france", img: "https://upload.wikimedia.org/wikipedia/en/c/c3/Flag_of_France.svg" },
         { q: "Guess the country flag:", a: "germany", img: "https://upload.wikimedia.org/wikipedia/en/b/ba/Flag_of_Germany.svg" },
@@ -67,6 +57,17 @@ const questions = {
         { q: "Guess the country flag:", a: "canada", img: "https://upload.wikimedia.org/wikipedia/commons/c/cf/Flag_of_Canada.svg" },
         { q: "Guess the country flag:", a: "india", img: "https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" },
         { q: "Guess the country flag:", a: "south korea", img: "https://upload.wikimedia.org/wikipedia/commons/0/09/Flag_of_South_Korea.svg" }
+
+    ],
+    medium: [
+        { q: "Who was the first President of the United States?", a: "George Washington" },
+        { q: "Who is known as the Father of the Philippine Revolution?", a: "Andres Bonifacio" },
+        { q: "In what year did the Philippines gain independence from Spain?", a: "1898" },
+        { q: "Who wrote the Declaration of Independence?", a: "Thomas Jefferson" },
+        { q: "What event started the American Revolution?", a: "Battles of Lexington and Concord" },
+        { q: "Who is the national hero of the Philippines?", a: "Jose Rizal" },
+        { q: "What was the first capital of the United States?", a: "Philadelphia" },
+        { q: "Who led the Katipunan during the Philippine Revolution?", a: "Andres Bonifacio" }
     ],
     hard: [
         { q: "What particle carries a negative electric charge?", a: "Electron" },
@@ -927,3 +928,4 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
