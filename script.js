@@ -499,6 +499,12 @@ function startAnswerTimer(team) {
 async function evaluateAnswer(team, ans) {
     if (!team || !ans) return;
 
+    // Prevent duplicate scoring of the same team + answer
+    window._evaluatedTeams = window._evaluatedTeams || {};
+    const key = `${currentLevel}_${currentQIndex}_${team}`;
+    if (window._evaluatedTeams[key]) return;
+    window._evaluatedTeams[key] = true;
+
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "📝 " + ans;
     }
@@ -509,106 +515,77 @@ async function evaluateAnswer(team, ans) {
     const answersData = snap.exists() ? snap.data() : {};
     const lvl = answersData.level || currentLevel;
     const idx = answersData.index ?? currentQIndex;
-
     const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
+    const teamAnswer = (ans || "").trim().toLowerCase();
+    const correct = teamAnswer === correctAns;
 
-    // EASY / MEDIUM: multiple teams may answer; award based on order of correct submissions
-    if (lvl === 'easy' || lvl === 'medium') {
-        const teamAnswer = (ans || "").trim().toLowerCase();
-        const correct = teamAnswer === correctAns;
-
-        // record correct order (if correct and not recorded yet)
+    // EASY / MEDIUM ROUND
+    if (lvl === "easy" || lvl === "medium") {
         const orderDoc = doc(db, "game", "correctOrder");
         const orderSnap = await getDoc(orderDoc);
         const orderData = orderSnap.exists() ? (orderSnap.data().order || []) : [];
 
         if (correct) {
-            // if already in order, ignore duplicate
             if (!orderData.includes(team)) {
                 orderData.push(team);
                 await setDoc(orderDoc, { order: orderData }, { merge: true });
             }
 
-            // award points based on position
-            let position = orderData.indexOf(team); // 0-based
-            let basePoints = (lvl === "easy") ? 100 : 300;
+            const basePoints = lvl === "easy" ? 100 : 300;
+            const position = orderData.indexOf(team);
             let awarded = 0;
-            if (position === 0) awarded = basePoints; // first -> full points
-            else if (position === 1) awarded = Math.round(basePoints * 0.25); // second -> reduce 75% => 25% awarded
-            else if (position === 2) awarded = Math.round(basePoints * 0.5); // third -> reduce 50% => 50% awarded
+            if (position === 0) awarded = basePoints;
+            else if (position === 1) awarded = Math.round(basePoints * 0.25);
+            else if (position === 2) awarded = Math.round(basePoints * 0.5);
 
             scores[team] = (scores[team] || 0) + awarded;
+            await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
             await saveScores();
             updateScores();
             highlightScore(team);
-
-            // show feedback
             stopAllTimersAndSounds();
             playSound("correctSound");
-            if (document.getElementById("submittedAnswer")) {
+            if (document.getElementById("submittedAnswer"))
                 document.getElementById("submittedAnswer").innerText = `✅ ${team} is CORRECT! (+${awarded})`;
-            }
 
-            // if all teams have either answered or order length == 3 or all teams submitted, lock question and cleanup
             const allTeams = ["Zack", "Ryan", "Kyle"];
-            const answersSnap = await getDoc(doc(db, "game", "answers"));
-            const ad = answersSnap.exists() ? answersSnap.data() : {};
-            const submittedCount = allTeams.filter(t => (ad[t] && ad[t].trim() !== "")).length;
-
-            // If everyone submitted OR all three correct positions filled OR time ended elsewhere, finalize
+            const submittedCount = allTeams.filter(t => answersData[t] && answersData[t].trim() !== "").length;
             if (submittedCount === allTeams.length || orderData.length === allTeams.length) {
                 lockQuestion(lvl, idx);
                 await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
                 await setOutTeams([]);
-                return;
             }
-
             return;
         } else {
-            // wrong answer -> no points & mark team as OUT; no steal mode in easy/medium
             playSound("wrongSound");
+            await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
             await handleTeamWrongOrTimeout(team, "WRONG");
             return;
         }
     }
 
-    // HARD: original single-team behaviour
-    if (ans.trim().toLowerCase() === correctAns) {
+    // HARD ROUND
+    if (correct) {
         stopAllTimersAndSounds();
         playSound("correctSound");
-
-        let points = (lvl === "hard") ? 500 : 0;
+        const points = 500;
         scores[team] = (scores[team] || 0) + points;
-
         await saveScores();
         updateScores();
         highlightScore(team);
-
-        // stop countdown
         clearInterval(countdownInterval);
         timeLeft = 0;
-        if (document.getElementById("circleTime")) {
-            document.getElementById("circleTime").textContent = "0";
-        }
+        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = "0";
         updateCircle(0, "lime", answerTime);
-
-        if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT!";
-        }
-
-        // lock question and cleanup
+        if (document.getElementById("submittedAnswer"))
+            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT! (+500)";
         lockQuestion(lvl, idx);
-        await setBuzzerState({ buzzed: "" });
-        await setDoc(doc(db, "game", "answers"), {
-            [team]: ""
-        }, { merge: true });
-        await setBuzzerState({ stealMode: false });
+        await setBuzzerState({ buzzed: "", stealMode: false });
         await setOutTeams([]);
-    }
-
-    // HARD Wrong
-    else {
+        await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
+    } else {
         playSound("wrongSound");
+        await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
         await handleTeamWrongOrTimeout(team, "WRONG");
     }
 }
@@ -922,37 +899,25 @@ function registerCurrentQuestionListener() {
 }
 
 
-// ================= OVERRIDES / STARTUP =================
-window.addEventListener("load", async() => {
+/// ================= OVERRIDES / STARTUP =================
+window.addEventListener("load", async () => {
     await loadScores();
     updateScores();
-
     registerAnswersListener();
     registerTeamBuzzerUI();
-    registerCurrentQuestionListener(); // ✅ ADD THIS
-
-    await setBuzzerState({
-        enableBuzzer: false,
-        buzzed: "",
-        answeringTeam: "",
-        stealMode: false
-    });
+    registerCurrentQuestionListener();
+    await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
 });
 
-
-
-// Unsubscribe listeners on unload
 window.addEventListener("beforeunload", () => {
     if (buzzerUnsub) buzzerUnsub();
     if (answersUnsub) answersUnsub();
 });
 
-
-// expose admin functions to global scope so HTML buttons work
+// expose admin functions
 window.startRound = startRound;
 window.showBoard = showBoard;
 window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
-
