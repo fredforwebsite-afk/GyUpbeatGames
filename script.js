@@ -236,37 +236,18 @@ async function startRound() {
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
         // start a countdown for the whole open-answer window (20s)
-// ✅ countdown: stop ONLY if all 3 teams answered OR time runs out
-        countdownInterval = setInterval(async () => {
+        countdownInterval = setInterval(() => {
             timeLeft--;
-            if (document.getElementById("circleTime"))
-                document.getElementById("circleTime").textContent = timeLeft;
+            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
             updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
-            // check if all 3 teams have answered
-            const snap = await getDoc(doc(db, "game", "answers"));
-            const data = snap.exists() ? snap.data() : {};
-            const allTeams = ["Zack", "Ryan", "Kyle"];
-            const answeredCount = allTeams.filter(
-                t => data[t] && data[t].trim() !== ""
-            ).length;
-
-            if (answeredCount === allTeams.length) {
-                // ✅ All teams have answered — stop timer early
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-                stopAllTimersAndSounds();
-                await finalizeEasyMediumRound();
-                return;
-            }
-
             if (timeLeft <= 0) {
-                // ✅ Time’s up — finalize
                 clearInterval(countdownInterval);
                 countdownInterval = null;
                 stopAllTimersAndSounds();
                 playSound("timesUpSound");
-                await finalizeEasyMediumRound();
+                // when time ends, evaluate remaining: reveal correct or award based on submitted correctOrder
+                finalizeEasyMediumRound().catch(console.error);
             }
         }, 1000);
     }
