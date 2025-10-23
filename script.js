@@ -26,18 +26,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Listen for countdown timer updates
-onSnapshot(doc(db, "game", "timer"), (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const t = data.timeLeft;
-    const countdownEl = document.getElementById("countdownDisplay");
-
-    if (countdownEl) {
-        countdownEl.textContent = t > 0 ? `⏳ ${t}s remaining` : "⏰ Time’s up!";
-    }
-});
-
 
 
 // ================= VARIABLES =================
@@ -187,14 +175,16 @@ let buzzerSnapshotCleanup = null;
 async function startRound() {
     // stop existing countdown
     clearInterval(countdownInterval);
-    timeLeft = buzzTime;
-    mode = "buzz";
 
+    // reset per-turn state
     await resetTurnState();
 
     // SPECIAL BEHAVIOR: easy/medium -> open simultaneous team-answer mode; hard -> original single-buzz + steal
     if (currentLevel === 'hard') {
-        // old behaviour: single team buzz -> switch to answer
+        // HARD: single team buzz -> switch to answer (unchanged)
+        mode = "buzz";
+        timeLeft = buzzTime;
+
         await setBuzzerState({
             enableBuzzer: true,
             buzzed: "",
@@ -222,56 +212,22 @@ async function startRound() {
 
         countdownInterval = setInterval(runTimer, 1000);
     } else {
-    // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
-    await setBuzzerState({
-        enableBuzzer: true,
-        buzzed: "",
-        answeringTeam: "",
-        stealMode: false
-    });
+        // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
+        // Use the ANSWER window (20s) for the circle timer so all teams have 20s to submit.
+        mode = "open"; // informational only
+        timeLeft = answerTime; // 20 seconds (uses existing answerTime variable)
 
-    // 🕒 GIVE 20 SECONDS TOTAL FOR ALL TEAMS TO ANSWER
-    timeLeft = 20; // <-- make sure timer always resets to 20 seconds
-    const totalAnswerWindow = 20;
-    await setDoc(doc(db, "game", "correctOrder"), { order: [] });
-
-    updateCircle(timeLeft, "lime", totalAnswerWindow);
-    if (document.getElementById("circleTime"))
-        document.getElementById("circleTime").textContent = timeLeft;
-    if (document.getElementById("firstBuzz"))
-        document.getElementById("firstBuzz").textContent = "Open to all teams";
-    if (document.getElementById("stealNotice"))
-        document.getElementById("stealNotice").textContent = "";
-
-    if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
-
-    // Countdown for everyone to submit
-countdownInterval = setInterval(async () => {
-    timeLeft--;
-
-    // 🕒 update Firestore so teams can see countdown
-    await setDoc(doc(db, "game", "timer"), { timeLeft }, { merge: true });
-
-    if (document.getElementById("circleTime"))
-        document.getElementById("circleTime").textContent = timeLeft;
-    updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", totalAnswerWindow);
-
-    if (timeLeft <= 0) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-        stopAllTimersAndSounds();
-        playSound("timesUpSound");
-        finalizeEasyMediumRound().catch(console.error);
-    }
-}, 1000);
-
-}
+        await setBuzzerState({
+            enableBuzzer: true,
+            buzzed: "",
+            answeringTeam: "",
+            stealMode: false
+        });
 
         // clear correctOrder
         await setDoc(doc(db, "game", "correctOrder"), { order: [] });
 
-        // We will still show a countdown but we will not stop enabling buzzer on first buzz.
-        updateCircle(buzzTime, "lime", buzzTime);
+        updateCircle(answerTime, "lime", answerTime);
         if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
         if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "Open to all teams";
         if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
@@ -279,11 +235,11 @@ countdownInterval = setInterval(async () => {
         // Ensure any previous buzzer listener is removed — team UI listens to buzzer state and will enable submit button
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
-        // start a countdown for the whole open-answer window
+        // start a countdown for the whole open-answer window (20s)
         countdownInterval = setInterval(() => {
             timeLeft--;
             if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-            updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
+            updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
             if (timeLeft <= 0) {
                 clearInterval(countdownInterval);
@@ -295,6 +251,8 @@ countdownInterval = setInterval(async () => {
             }
         }, 1000);
     }
+}
+
 
 async function finalizeEasyMediumRound() {
     // award any teams that have answered correctly but not yet awarded (evaluateAnswer handles awarding as they submit)
