@@ -237,20 +237,45 @@ async function startRound() {
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
         // start a countdown for the whole open-answer window (20s)
-        countdownInterval = setInterval(() => {
-            timeLeft--;
-            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-            updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
+// Track number of teams that have submitted
+let submittedTeams = new Set();
 
-            if (timeLeft <= 0) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-                stopAllTimersAndSounds();
-                playSound("timesUpSound");
-                // when time ends, evaluate remaining: reveal correct or award based on submitted correctOrder
-                finalizeEasyMediumRound().catch(console.error);
-            }
-        }, 1000);
+// Listen to answer submissions
+const answersRef = collection(db, "game", "answers");
+const answersUnsub = onSnapshot(answersRef, (snapshot) => {
+    submittedTeams.clear();
+    snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.submitted) submittedTeams.add(data.teamId);
+    });
+
+    // Stop timer only when 3 teams have submitted
+    if (submittedTeams.size >= 3) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        answersUnsub(); // stop listening
+        stopAllTimersAndSounds();
+        finalizeEasyMediumRound().catch(console.error);
+    }
+});
+
+// Continue countdown as usual
+countdownInterval = setInterval(() => {
+    timeLeft--;
+    if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+    updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
+
+    // Timer ends normally if time runs out before 3 teams submit
+    if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        answersUnsub(); // stop listening
+        stopAllTimersAndSounds();
+        playSound("timesUpSound");
+        finalizeEasyMediumRound().catch(console.error);
+    }
+}, 1000);
+
     }
 }
 
@@ -928,10 +953,3 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
-
-
-
-
-
-
-
