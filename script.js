@@ -526,9 +526,18 @@ async function evaluateAnswer(team, ans) {
     const answersData = snap.exists() ? snap.data() : {};
     const lvl = answersData.level || currentLevel;
     const idx = answersData.index ?? currentQIndex;
-    const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
-    const teamAnswer = (ans || "").trim().toLowerCase();
-    const correct = teamAnswer === correctAns;
+const rawAns = questions[lvl][idx].a;
+const teamAnswer = (ans || "").trim().toLowerCase();
+
+let correct = false;
+if (Array.isArray(rawAns)) {
+    correct = rawAns.some(
+        v => v.trim().toLowerCase() === teamAnswer
+    );
+} else {
+    correct = teamAnswer === (rawAns || "").trim().toLowerCase();
+}
+
 
     // EASY / MEDIUM ROUND
     if (lvl === "easy" || lvl === "medium") {
@@ -932,6 +941,7 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
 
