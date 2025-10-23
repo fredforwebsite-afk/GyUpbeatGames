@@ -26,6 +26,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// Listen for countdown timer updates
+onSnapshot(doc(db, "game", "timer"), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const t = data.timeLeft;
+    const countdownEl = document.getElementById("countdownDisplay");
+
+    if (countdownEl) {
+        countdownEl.textContent = t > 0 ? `⏳ ${t}s remaining` : "⏰ Time’s up!";
+    }
+});
+
 
 
 // ================= VARIABLES =================
@@ -210,13 +222,50 @@ async function startRound() {
 
         countdownInterval = setInterval(runTimer, 1000);
     } else {
-        // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
-        await setBuzzerState({
-            enableBuzzer: true,
-            buzzed: "",
-            answeringTeam: "",
-            stealMode: false
-        });
+    // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
+    await setBuzzerState({
+        enableBuzzer: true,
+        buzzed: "",
+        answeringTeam: "",
+        stealMode: false
+    });
+
+    // 🕒 GIVE 20 SECONDS TOTAL FOR ALL TEAMS TO ANSWER
+    timeLeft = 20; // <-- make sure timer always resets to 20 seconds
+    const totalAnswerWindow = 20;
+    await setDoc(doc(db, "game", "correctOrder"), { order: [] });
+
+    updateCircle(timeLeft, "lime", totalAnswerWindow);
+    if (document.getElementById("circleTime"))
+        document.getElementById("circleTime").textContent = timeLeft;
+    if (document.getElementById("firstBuzz"))
+        document.getElementById("firstBuzz").textContent = "Open to all teams";
+    if (document.getElementById("stealNotice"))
+        document.getElementById("stealNotice").textContent = "";
+
+    if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
+
+    // Countdown for everyone to submit
+countdownInterval = setInterval(async () => {
+    timeLeft--;
+
+    // 🕒 update Firestore so teams can see countdown
+    await setDoc(doc(db, "game", "timer"), { timeLeft }, { merge: true });
+
+    if (document.getElementById("circleTime"))
+        document.getElementById("circleTime").textContent = timeLeft;
+    updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", totalAnswerWindow);
+
+    if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        stopAllTimersAndSounds();
+        playSound("timesUpSound");
+        finalizeEasyMediumRound().catch(console.error);
+    }
+}, 1000);
+
+}
 
         // clear correctOrder
         await setDoc(doc(db, "game", "correctOrder"), { order: [] });
@@ -246,7 +295,6 @@ async function startRound() {
             }
         }, 1000);
     }
-}
 
 async function finalizeEasyMediumRound() {
     // award any teams that have answered correctly but not yet awarded (evaluateAnswer handles awarding as they submit)
@@ -535,8 +583,8 @@ async function evaluateAnswer(team, ans) {
             const position = orderData.indexOf(team);
             let awarded = 0;
             if (position === 0) awarded = basePoints;
-            else if (position === 1) awarded = Math.round(basePoints * 0.25);
-            else if (position === 2) awarded = Math.round(basePoints * 0.5);
+            else if (position === 1) awarded = Math.round(basePoints * 0.75);
+            else if (position === 2) awarded = Math.round(basePoints * 0.50);
 
             scores[team] = (scores[team] || 0) + awarded;
             await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
