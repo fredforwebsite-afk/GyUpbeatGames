@@ -60,14 +60,17 @@ const questions = {
 
     ],
     medium: [
-        { q: "Who was the first President of the United States?", a: "George Washington" },
-        { q: "Who is known as the Father of the Philippine Revolution?", a: "Andres Bonifacio" },
-        { q: "In what year did the Philippines gain independence from Spain?", a: "1898" },
-        { q: "Who wrote the Declaration of Independence?", a: "Thomas Jefferson" },
-        { q: "What event started the American Revolution?", a: "Battles of Lexington and Concord" },
-        { q: "Who is the national hero of the Philippines?", a: "Jose Rizal" },
-        { q: "What was the first capital of the United States?", a: "Philadelphia" },
-        { q: "Who led the Katipunan during the Philippine Revolution?", a: "Andres Bonifacio" }
+        { q: "How many Members are in the UN?", a: "193" },
+        { q: "How many official languages does UN have?", a: "6" },
+        { q: "What is the forerunner organization of the United Nations?", a: "League of Nations" },
+        { q: "Whre are the Headquarters of United Nations?", a: "New York" },
+        { q: "Which Organization of the UN is in charged with maintaining peace and security among countries?", a: " Security Council" },
+        { q: "The security council of the UN consisit of how many member state?", a: "15" },
+        { q: "The United Nations is divided into how many administrtative bodies?", a: "6" },
+        { q: "What is the nationality of the present secretary General of UN?", a: "Portugal" },
+        { q: "After which major war was the United Nations Charter established?", a: "World War II" },
+        { q: "What is the name of the document which sets out the main aims of the UN and the rights and obligations of each member state?", a: "The United Nations Charter" }
+        
     ],
     hard: [
         { q: "What particle carries a negative electric charge?", a: "Electron" },
@@ -928,3 +931,4 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
