@@ -213,65 +213,61 @@ async function startRound() {
 
         countdownInterval = setInterval(runTimer, 1000);
     } else {
-        // EASY / MEDIUM: all teams can answer within 20s
-        mode = "buzz"; // keep team buttons active
-        timeLeft = answerTime; // 20 seconds
+    // EASY / MEDIUM: allow all teams to submit one answer each (20s)
+    mode = "open";
+    timeLeft = answerTime;
 
-        await setBuzzerState({
-            enableBuzzer: true,
-            buzzed: "",
-            answeringTeam: "",
-            stealMode: false
-        });
+    await setBuzzerState({
+        enableBuzzer: true,
+        buzzed: "",
+        answeringTeam: "",
+        stealMode: false
+    });
 
-        // reset correct order
-        await setDoc(doc(db, "game", "correctOrder"), { order: [] });
+    await setDoc(doc(db, "game", "correctOrder"), { order: [] });
 
-        updateCircle(answerTime, "lime", answerTime);
-        if (document.getElementById("circleTime"))
-            document.getElementById("circleTime").textContent = timeLeft;
-        if (document.getElementById("firstBuzz"))
-            document.getElementById("firstBuzz").textContent = "Open to all teams";
-        if (document.getElementById("stealNotice"))
-            document.getElementById("stealNotice").textContent = "";
+    updateCircle(answerTime, "lime", answerTime);
+    document.getElementById("circleTime").textContent = timeLeft;
+    document.getElementById("firstBuzz").textContent = "Open to all teams";
+    document.getElementById("stealNotice").textContent = "";
 
-        if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
+    if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
-        // ✅ timer logic: only stop early when all 3 teams have answered
-        countdownInterval = setInterval(async () => {
-            timeLeft--;
+    // ✅ Listen to answers in real time
+    const answersRef = doc(db, "game", "answers");
+    let answersUnsub = onSnapshot(answersRef, async (snap) => {
+        const data = snap.exists() ? snap.data() : {};
+        const allTeams = ["Zack", "Ryan", "Kyle"];
+        const answeredCount = allTeams.filter(
+            t => data[t] && data[t].trim() !== ""
+        ).length;
 
-            if (document.getElementById("circleTime"))
-                document.getElementById("circleTime").textContent = timeLeft;
-            updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
+        // ✅ stop early ONLY when all 3 have submitted
+        if (answeredCount === allTeams.length) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            answersUnsub();
+            stopAllTimersAndSounds();
+            await finalizeEasyMediumRound();
+        }
+    });
 
-            // check how many teams have submitted an answer
-            const snap = await getDoc(doc(db, "game", "answers"));
-            const data = snap.exists() ? snap.data() : {};
-            const allTeams = ["Zack", "Ryan", "Kyle"];
-            const answeredCount = allTeams.filter(
-                t => data[t] && data[t].trim() !== ""
-            ).length;
+    // ✅ timer countdown
+    countdownInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById("circleTime").textContent = timeLeft;
+        updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
-            // ✅ only stop early when ALL THREE have answered
-            if (answeredCount === allTeams.length) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-                stopAllTimersAndSounds();
-                await finalizeEasyMediumRound();
-                return;
-            }
-
-            // stop normally when time runs out
-            if (timeLeft <= 0) {
-                clearInterval(countdownInterval);
-                countdownInterval = null;
-                stopAllTimersAndSounds();
-                playSound("timesUpSound");
-                await finalizeEasyMediumRound();
-            }
-        }, 1000);
-    }
+        if (timeLeft <= 0) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            answersUnsub();
+            stopAllTimersAndSounds();
+            playSound("timesUpSound");
+            finalizeEasyMediumRound().catch(console.error);
+        }
+    }, 1000);
+}
 
 }
 
