@@ -193,11 +193,13 @@ async function startRound() {
         });
 
         updateCircle(buzzTime, "lime", buzzTime);
-        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-        if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "None yet";
-        if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
+        if (document.getElementById("circleTime"))
+            document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("firstBuzz"))
+            document.getElementById("firstBuzz").textContent = "None yet";
+        if (document.getElementById("stealNotice"))
+            document.getElementById("stealNotice").textContent = "";
 
-        // register a single buzzer snapshot listener (unsub first if already registered)
         if (buzzerUnsub) {
             buzzerUnsub();
             buzzerUnsub = null;
@@ -205,17 +207,15 @@ async function startRound() {
         buzzerUnsub = onSnapshot(doc(db, "game", "buzzer"), (snap) => {
             const data = snap.exists() ? snap.data() : {};
             if (data.buzzed && data.buzzed !== "") {
-                // buzz happened
                 stopOnBuzz(data.buzzed).catch(console.error);
             }
         });
 
         countdownInterval = setInterval(runTimer, 1000);
     } else {
-        // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
-        // Use the ANSWER window (20s) for the circle timer so all teams have 20s to submit.
-        mode = "open"; // informational only
-        timeLeft = answerTime; // 20 seconds (uses existing answerTime variable)
+        // EASY / MEDIUM: open simultaneous team-answer mode
+        mode = "buzz"; // keep teams clickable for submissions
+        timeLeft = answerTime; // 20 seconds
 
         await setBuzzerState({
             enableBuzzer: true,
@@ -228,30 +228,51 @@ async function startRound() {
         await setDoc(doc(db, "game", "correctOrder"), { order: [] });
 
         updateCircle(answerTime, "lime", answerTime);
-        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-        if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "Open to all teams";
-        if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
+        if (document.getElementById("circleTime"))
+            document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("firstBuzz"))
+            document.getElementById("firstBuzz").textContent = "Open to all teams";
+        if (document.getElementById("stealNotice"))
+            document.getElementById("stealNotice").textContent = "";
 
-        // Ensure any previous buzzer listener is removed — team UI listens to buzzer state and will enable submit button
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
-        // start a countdown for the whole open-answer window (20s)
-        countdownInterval = setInterval(() => {
+        // ✅ Start countdown: stop only if all 3 teams have answered OR when time's up
+        countdownInterval = setInterval(async () => {
             timeLeft--;
-            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+            if (document.getElementById("circleTime"))
+                document.getElementById("circleTime").textContent = timeLeft;
             updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
+            // Check if all 3 teams have answered
+            const snap = await getDoc(doc(db, "game", "answers"));
+            const data = snap.exists() ? snap.data() : {};
+            const allTeams = ["Zack", "Ryan", "Kyle"];
+            const answeredCount = allTeams.filter(
+                t => data[t] && data[t].trim() !== ""
+            ).length;
+
+            if (answeredCount === allTeams.length) {
+                // ✅ All teams answered — stop early
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+                stopAllTimersAndSounds();
+                await finalizeEasyMediumRound();
+                return;
+            }
+
             if (timeLeft <= 0) {
+                // ✅ Time’s up — finalize
                 clearInterval(countdownInterval);
                 countdownInterval = null;
                 stopAllTimersAndSounds();
                 playSound("timesUpSound");
-                // when time ends, evaluate remaining: reveal correct or award based on submitted correctOrder
-                finalizeEasyMediumRound().catch(console.error);
+                await finalizeEasyMediumRound();
             }
         }, 1000);
     }
 }
+
 
 
 async function finalizeEasyMediumRound() {
