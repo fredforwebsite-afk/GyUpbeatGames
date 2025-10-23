@@ -559,23 +559,28 @@ if (Array.isArray(rawAns)) {
             else if (position === 1) awarded = Math.round(basePoints * 0.6);
             else if (position === 2) awarded = Math.round(basePoints * 0.4);
 
-            scores[team] = (scores[team] || 0) + awarded;
-            await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
-            await saveScores();
-            updateScores();
-            highlightScore(team);
-            stopAllTimersAndSounds();
-            playSound("correctSound");
-            if (document.getElementById("submittedAnswer"))
-                document.getElementById("submittedAnswer").innerText = `✅ ${team} is CORRECT! (+${awarded})`;
+scores[team] = (scores[team] || 0) + awarded;
+await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
+await saveScores();
+updateScores();
+highlightScore(team);
+playSound("correctSound");
 
-            const allTeams = ["Zack", "Ryan", "Kyle"];
-            const submittedCount = allTeams.filter(t => answersData[t] && answersData[t].trim() !== "").length;
-            if (submittedCount === allTeams.length || orderData.length === allTeams.length) {
-                lockQuestion(lvl, idx);
-                await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
-                await setOutTeams([]);
-            }
+if (document.getElementById("submittedAnswer"))
+    document.getElementById("submittedAnswer").innerText = `✅ ${team} is CORRECT! (+${awarded})`;
+
+// ✅ NEW LOGIC: only stop the timer when all teams have submitted or been scored
+const allTeams = ["Zack", "Ryan", "Kyle"];
+const submittedCount = allTeams.filter(t => answersData[t] && answersData[t].trim() !== "").length;
+
+if (submittedCount === allTeams.length || orderData.length === allTeams.length) {
+    // everyone has answered -> stop timer and lock question
+    stopAllTimersAndSounds();
+    lockQuestion(lvl, idx);
+    await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
+    await setOutTeams([]);
+}
+
             return;
         } else {
             playSound("wrongSound");
@@ -942,6 +947,7 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
 
