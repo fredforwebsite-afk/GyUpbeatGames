@@ -1,4 +1,4 @@
-// script.js
+// script-updated.js
 // ================= FIREBASE SETUP =================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import {
@@ -40,10 +40,6 @@ let mode = "buzz"; // "buzz" or "answer"
 let buzzTime = 10;
 let answerTime = 20;
 let stealUsed = false;
-// ================= NEW SCORING TRACKERS =================
-let correctTeamsOrder = []; // Track order of teams who got it correct (for easy/medium)
-let answeredTeams = [];     // Track who already answered (no duplicates)
-
 
 // snapshot unsubscribes
 let buzzerUnsub = null;
@@ -136,13 +132,16 @@ async function resetTurnState() {
     });
     await setOutTeams([]);
 
-    // clear answers for safety (keeps doc but empties teams)
+    // reset answers for safety (keeps doc but empties teams)
     await setDoc(doc(db, "game", "answers"), {
         Zack: "",
         Ryan: "",
         Kyle: "",
         submittedAnswer: ""
     }, { merge: true });
+
+    // reset correctOrder for easy/medium flows
+    await setDoc(doc(db, "game", "correctOrder"), { order: [] });
 
     // UI resets
     if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳";
@@ -169,18 +168,21 @@ function stopAllTimersAndSounds() {
 }
 
 
+
 // ================= ADMIN FUNCTIONS =================
 let buzzerSnapshotCleanup = null;
 
 async function startRound() {
+    // stop existing countdown
     clearInterval(countdownInterval);
     timeLeft = buzzTime;
     mode = "buzz";
 
     await resetTurnState();
 
-    // 🟢 EASY & MEDIUM: all teams can answer right away
-    if (currentLevel === "easy" || currentLevel === "medium") {
+    // SPECIAL BEHAVIOR: easy/medium -> open simultaneous team-answer mode; hard -> original single-buzz + steal
+    if (currentLevel === 'hard') {
+        // old behaviour: single team buzz -> switch to answer
         await setBuzzerState({
             enableBuzzer: true,
             buzzed: "",
@@ -188,52 +190,81 @@ async function startRound() {
             stealMode: false
         });
 
-        if (document.getElementById("firstBuzz")) {
-            document.getElementById("firstBuzz").textContent = "All teams may answer!";
-        }
-        if (document.getElementById("stealNotice")) {
-            document.getElementById("stealNotice").textContent = "";
-        }
+        updateCircle(buzzTime, "lime", buzzTime);
+        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "None yet";
+        if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
 
-        // No countdown buzz phase
-        if (document.getElementById("circleTime")) {
-            document.getElementById("circleTime").textContent = "";
+        // register a single buzzer snapshot listener (unsub first if already registered)
+        if (buzzerUnsub) {
+            buzzerUnsub();
+            buzzerUnsub = null;
         }
-        updateCircle(0, "lime", buzzTime);
+        buzzerUnsub = onSnapshot(doc(db, "game", "buzzer"), (snap) => {
+            const data = snap.exists() ? snap.data() : {};
+            if (data.buzzed && data.buzzed !== "") {
+                // buzz happened
+                stopOnBuzz(data.buzzed).catch(console.error);
+            }
+        });
+
+        countdownInterval = setInterval(runTimer, 1000);
+    } else {
+        // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
+        await setBuzzerState({
+            enableBuzzer: true,
+            buzzed: "",
+            answeringTeam: "",
+            stealMode: false
+        });
+
+        // clear correctOrder
+        await setDoc(doc(db, "game", "correctOrder"), { order: [] });
+
+        // We will still show a countdown but we will not stop enabling buzzer on first buzz.
+        updateCircle(buzzTime, "lime", buzzTime);
+        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "Open to all teams";
+        if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
+
+        // Ensure any previous buzzer listener is removed — team UI listens to buzzer state and will enable submit button
+        if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
+
+        // start a countdown for the whole open-answer window
+        countdownInterval = setInterval(() => {
+            timeLeft--;
+            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+            updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
+
+            if (timeLeft <= 0) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+                stopAllTimersAndSounds();
+                playSound("timesUpSound");
+                // when time ends, evaluate remaining: reveal correct or award based on submitted correctOrder
+                finalizeEasyMediumRound().catch(console.error);
+            }
+        }, 1000);
+    }
+}
+
+async function finalizeEasyMediumRound() {
+    // award any teams that have answered correctly but not yet awarded (evaluateAnswer handles awarding as they submit)
+    // after awarding, lock question and cleanup
+    const correctSnap = await getDoc(doc(db, "game", "correctOrder"));
+    const order = correctSnap.exists() ? (correctSnap.data().order || []) : [];
+
+    // if at least one correct occurred we keep scores as-is. If none correct and all teams either submitted or time ended, reveal answer.
+    if (order.length === 0) {
+        await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🧠 HARD LEVEL: original buzzer logic
-    await setBuzzerState({
-        enableBuzzer: true,
-        buzzed: "",
-        answeringTeam: "",
-        stealMode: false
-    });
-
-    updateCircle(buzzTime, "lime", buzzTime);
-    if (document.getElementById("circleTime"))
-        document.getElementById("circleTime").textContent = timeLeft;
-    if (document.getElementById("firstBuzz"))
-        document.getElementById("firstBuzz").textContent = "None yet";
-    if (document.getElementById("stealNotice"))
-        document.getElementById("stealNotice").textContent = "";
-
-    // keep your original buzzer listener logic
-    if (buzzerUnsub) {
-        buzzerUnsub();
-        buzzerUnsub = null;
-    }
-    buzzerUnsub = onSnapshot(doc(db, "game", "buzzer"), (snap) => {
-        const data = snap.exists() ? snap.data() : {};
-        if (data.buzzed && data.buzzed !== "") {
-            stopOnBuzz(data.buzzed).catch(console.error);
-        }
-    });
-
-    countdownInterval = setInterval(runTimer, 1000);
+    // lock question
+    lockQuestion(currentLevel, currentQIndex);
+    await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
+    await setOutTeams([]);
 }
-
 
 function runTimer() {
     timeLeft--;
@@ -377,40 +408,55 @@ function selectTeam(team) {
 async function submitAnswer() {
     let team = sessionStorage.getItem("team");
     let ansEl = document.getElementById("teamAnswer");
-    let ans = ansEl ? ansEl.value.trim() : "";
+    let ans = ansEl ? ansEl.value : "";
     if (!team || !ans) return;
 
-    const answersRef = doc(db, "game", "answers");
-    const snap = await getDoc(answersRef);
-    const data = snap.exists() ? snap.data() : {};
+    // For easy & medium: accept only first submission per team (multiple members can't overwrite). Save timestamp.
+    if (currentLevel === 'easy' || currentLevel === 'medium') {
+        const snap = await getDoc(doc(db, "game", "answers"));
+        const data = snap.exists() ? snap.data() : {};
+        if (data[team] && data[team].trim() !== "") {
+            // team already submitted — ignore further submits
+            if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⚠️ You already submitted";
+            return;
+        }
 
-    // Prevent same team answering twice
-    if (answeredTeams.includes(team)) {
-        alert("❌ You already submitted an answer!");
+        // Write team answer with timestamp and level/index for evaluation
+        await setDoc(doc(db, "game", "answers"), {
+            [team]: ans,
+            submittedAnswer: ans,
+            level: currentLevel,
+            index: currentQIndex,
+            [`${team}_ts`]: Date.now()
+        }, { merge: true });
+
+        if (document.getElementById("answerArea")) {
+            document.getElementById("answerArea").style.display = "none";
+        }
+        // no countdown interruption here; evaluateAnswer will handle awarding in real-time
         return;
     }
 
-    // Prevent duplicate answer across teams
-    const existingAnswers = Object.values(data).map(v => (typeof v === "string" ? v.trim().toLowerCase() : ""));
-    if (existingAnswers.includes(ans.toLowerCase())) {
-        alert("❌ Another team already submitted this answer.");
+    // For hard: original behavior (only answeringTeam can submit when switched to answer)
+    let buzzerSnap = await getDoc(doc(db, "game", "buzzer"));
+    const buzzerData = buzzerSnap.exists() ? buzzerSnap.data() : {};
+    if (buzzerData.answeringTeam !== team) {
+        if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "❌ Not your turn to answer";
         return;
     }
 
-    // Save answer
-    await setDoc(answersRef, {
+    await setDoc(doc(db, "game", "answers"), {
         [team]: ans,
         submittedAnswer: ans,
         level: currentLevel,
         index: currentQIndex
     }, { merge: true });
 
-    answeredTeams.push(team);
     if (document.getElementById("answerArea")) {
         document.getElementById("answerArea").style.display = "none";
     }
+    clearInterval(answerTimerInterval); // stop admin answer timer loop if running
 }
-
 
 
 
@@ -453,69 +499,115 @@ function startAnswerTimer(team) {
 async function evaluateAnswer(team, ans) {
     if (!team || !ans) return;
 
+    if (document.getElementById("submittedAnswer")) {
+        document.getElementById("submittedAnswer").innerText = "📝 " + ans;
+    }
+    clearInterval(answerTimerInterval);
+    answerTimerInterval = null;
+
     const snap = await getDoc(doc(db, "game", "answers"));
     const answersData = snap.exists() ? snap.data() : {};
     const lvl = answersData.level || currentLevel;
     const idx = answersData.index ?? currentQIndex;
+
     const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
-    const teamAns = ans.trim().toLowerCase();
 
-    // --- EASY & MEDIUM MODE: MULTI-TEAM ANSWERS ---
-    if (lvl === "easy" || lvl === "medium") {
-        // Evaluate correctness
-        if (teamAns === correctAns) {
-            if (!correctTeamsOrder.includes(team)) {
-                correctTeamsOrder.push(team);
+    // EASY / MEDIUM: multiple teams may answer; award based on order of correct submissions
+    if (lvl === 'easy' || lvl === 'medium') {
+        const teamAnswer = (ans || "").trim().toLowerCase();
+        const correct = teamAnswer === correctAns;
 
-                let basePoints = lvl === "easy" ? 100 : 300;
-                let multiplier = 1.0;
+        // record correct order (if correct and not recorded yet)
+        const orderDoc = doc(db, "game", "correctOrder");
+        const orderSnap = await getDoc(orderDoc);
+        const orderData = orderSnap.exists() ? (orderSnap.data().order || []) : [];
 
-                if (correctTeamsOrder.length === 2) multiplier = 0.75;
-                else if (correctTeamsOrder.length === 3) multiplier = 0.5;
-
-                const earned = Math.round(basePoints * multiplier);
-                scores[team] = (scores[team] || 0) + earned;
-                await saveScores();
-                updateScores();
-                highlightScore(team);
-
-                if (document.getElementById("submittedAnswer"))
-                    document.getElementById("submittedAnswer").innerText =
-                        `✅ ${team} got it correct! (+${earned} pts)`;
+        if (correct) {
+            // if already in order, ignore duplicate
+            if (!orderData.includes(team)) {
+                orderData.push(team);
+                await setDoc(orderDoc, { order: orderData }, { merge: true });
             }
+
+            // award points based on position
+            let position = orderData.indexOf(team); // 0-based
+            let basePoints = (lvl === "easy") ? 100 : 300;
+            let awarded = 0;
+            if (position === 0) awarded = basePoints; // first -> full points
+            else if (position === 1) awarded = Math.round(basePoints * 0.25); // second -> reduce 75% => 25% awarded
+            else if (position === 2) awarded = Math.round(basePoints * 0.5); // third -> reduce 50% => 50% awarded
+
+            scores[team] = (scores[team] || 0) + awarded;
+            await saveScores();
+            updateScores();
+            highlightScore(team);
+
+            // show feedback
+            stopAllTimersAndSounds();
+            playSound("correctSound");
+            if (document.getElementById("submittedAnswer")) {
+                document.getElementById("submittedAnswer").innerText = `✅ ${team} is CORRECT! (+${awarded})`;
+            }
+
+            // if all teams have either answered or order length == 3 or all teams submitted, lock question and cleanup
+            const allTeams = ["Zack", "Ryan", "Kyle"];
+            const answersSnap = await getDoc(doc(db, "game", "answers"));
+            const ad = answersSnap.exists() ? answersSnap.data() : {};
+            const submittedCount = allTeams.filter(t => (ad[t] && ad[t].trim() !== "")).length;
+
+            // If everyone submitted OR all three correct positions filled OR time ended elsewhere, finalize
+            if (submittedCount === allTeams.length || orderData.length === allTeams.length) {
+                lockQuestion(lvl, idx);
+                await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
+                await setOutTeams([]);
+                return;
+            }
+
+            return;
         } else {
-            if (document.getElementById("submittedAnswer"))
-                document.getElementById("submittedAnswer").innerText =
-                    `❌ ${team} is wrong. No points.`;
+            // wrong answer -> no points & mark team as OUT; no steal mode in easy/medium
+            playSound("wrongSound");
+            await handleTeamWrongOrTimeout(team, "WRONG");
+            return;
         }
-
-        // When all teams answered → lock question
-        if (answeredTeams.length >= 3) {
-            await revealCorrectAnswerAndLock();
-        }
-
-        return;
     }
 
-    // --- HARD MODE: OLD STEAL LOGIC ---
-    const correct = (teamAns === correctAns);
-    if (correct) {
+    // HARD: original single-team behaviour
+    if (ans.trim().toLowerCase() === correctAns) {
         stopAllTimersAndSounds();
         playSound("correctSound");
 
-        let points = lvl === "hard" ? 500 : 0;
+        let points = (lvl === "hard") ? 500 : 0;
         scores[team] = (scores[team] || 0) + points;
+
         await saveScores();
         updateScores();
         highlightScore(team);
 
-        if (document.getElementById("submittedAnswer"))
-            document.getElementById("submittedAnswer").innerText = `✅ ${team} is CORRECT!`;
+        // stop countdown
+        clearInterval(countdownInterval);
+        timeLeft = 0;
+        if (document.getElementById("circleTime")) {
+            document.getElementById("circleTime").textContent = "0";
+        }
+        updateCircle(0, "lime", answerTime);
 
+        if (document.getElementById("submittedAnswer")) {
+            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT!";
+        }
+
+        // lock question and cleanup
         lockQuestion(lvl, idx);
-        await setBuzzerState({ buzzed: "", stealMode: false });
+        await setBuzzerState({ buzzed: "" });
+        await setDoc(doc(db, "game", "answers"), {
+            [team]: ""
+        }, { merge: true });
+        await setBuzzerState({ stealMode: false });
         await setOutTeams([]);
-    } else {
+    }
+
+    // HARD Wrong
+    else {
         playSound("wrongSound");
         await handleTeamWrongOrTimeout(team, "WRONG");
     }
@@ -523,42 +615,8 @@ async function evaluateAnswer(team, ans) {
 
 
 
-
-
 // ================= WRONG / TIMEOUT / STEAL =================
 async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
-    // ✅ EASY & MEDIUM LEVEL: simple wrong handling, no steal, no buzz reset
-    if (currentLevel === "easy" || currentLevel === "medium") {
-        if (document.getElementById("firstBuzz")) {
-            document.getElementById("firstBuzz").innerText = `${team} (${reasonLabel})`;
-        }
-
-        if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = `❌ ${team} is wrong. No points.`;
-        }
-
-        // just mark the team as answered/wrong so they can't retry
-        const outs = await getOutTeams();
-        if (!outs.includes(team)) outs.push(team);
-        await setOutTeams(outs);
-
-        // clear their submitted answer
-        await setDoc(doc(db, "game", "answers"), {
-            [team]: ""
-        }, { merge: true });
-
-        // when all teams already answered, reveal correct answer
-        const allTeams = ["Zack", "Ryan", "Kyle"];
-        const remaining = allTeams.filter(t => !outs.includes(t));
-        if (remaining.length === 0) {
-            stopAllTimersAndSounds();
-            await revealCorrectAnswerAndLock();
-        }
-
-        return;
-    }
-
-    // 🧠 HARD LEVEL: retain original steal/buzz logic
     if (document.getElementById("firstBuzz")) {
         document.getElementById("firstBuzz").innerText = team + " (" + reasonLabel + ")";
     }
@@ -567,8 +625,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     if (!outs.includes(team)) outs.push(team);
     await setOutTeams(outs);
 
-    // clear the buzz and that team's answer
-    await setBuzzerState({ buzzed: "" });
+    // clear that team's answer (but keep record of submission timestamp if needed)
     await setDoc(doc(db, "game", "answers"), {
         [team]: ""
     }, { merge: true });
@@ -576,18 +633,37 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
     const allTeams = ["Zack", "Ryan", "Kyle"];
     const remaining = allTeams.filter(t => !outs.includes(t));
 
-    // 🛑 Case 1: all 3 teams OUT → reveal answer
+    // EASY / MEDIUM: do NOT engage steal mode. If some teams remain, keep open for them until they submit or time ends.
+    if (currentLevel === 'easy' || currentLevel === 'medium') {
+        // if no remaining teams -> reveal answer
+        if (remaining.length === 0) {
+            stopAllTimersAndSounds();
+            await revealCorrectAnswerAndLock();
+            return;
+        }
+
+        // otherwise simply keep buzzer enabled for remaining teams (no steal notice)
+        await setBuzzerState({ enableBuzzer: true, buzzed: "", answeringTeam: "", stealMode: false });
+        if (document.getElementById("stealNotice")) {
+            document.getElementById("stealNotice").innerText = `Remaining teams: ${remaining.join(', ')}`;
+        }
+
+        return;
+    }
+
+    // HARD: original steal logic remains
+    // 🛑 Case 1: lahat ng 3 teams OUT → reveal answer
     if (remaining.length === 0) {
         stopAllTimersAndSounds();
         await revealCorrectAnswerAndLock();
         return;
     }
 
-    // 🟡 Case 2: only one team left → final steal chance
+    // 🟡 Case 2: isa na lang natira → siya lang ang naka-enable buzzer
     if (remaining.length === 1) {
         const lastTeam = remaining[0];
         await setBuzzerState({
-            enableBuzzer: true,
+            enableBuzzer: true, // siya lang ang pwede mag-buzz
             buzzed: "",
             answeringTeam: "",
             stealMode: true
@@ -598,6 +674,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
                 "🚨 FINAL CHANCE: " + lastTeam + " must buzz to answer!";
         }
 
+        // reset countdown for STEAL buzz
         clearInterval(countdownInterval);
         mode = "buzz";
         timeLeft = buzzTime;
@@ -609,7 +686,7 @@ async function handleTeamWrongOrTimeout(team, reasonLabel = "WRONG") {
         return;
     }
 
-    // 🟢 Case 3: two teams remaining → regular steal mode
+    // 🟢 Case 3: dalawa pa natitira → STEAL MODE normal
     else if (remaining.length === 2) {
         await setBuzzerState({
             enableBuzzer: true,
@@ -706,32 +783,31 @@ function registerTeamBuzzerUI() {
         let team = sessionStorage.getItem("team");
         const outs = await getOutTeams();
 
-        const btn = document.getElementById("buzzerBtn");
-        const area = document.getElementById("answerArea");
-
-        // 🟢 EASY & MEDIUM: always enable buzzer & show answer input
-        if (currentLevel === "easy" || currentLevel === "medium") {
-            if (btn) btn.disabled = false;
-            if (area) area.style.display = "block";
-            return;
-        }
-
-        // 🧠 HARD LEVEL: normal logic
+        // normal buzz: buzzer enabled, no one buzzed yet, and team not out
         const canNormal = enable && !alreadyBuzzed && !outs.includes(team);
+
+        // steal: same rules, but only active if stealMode is true
         const canSteal = stealMode && !alreadyBuzzed && !outs.includes(team);
 
+        const btn = document.getElementById("buzzerBtn");
         if (btn) btn.disabled = !(canNormal || canSteal);
 
+        // ✅ Always show answer box if this team is the answering team OR (easy/medium they can open answer directly)
+        const area = document.getElementById("answerArea");
         if (area) {
             if (data.answeringTeam === team) {
                 area.style.display = "block";
             } else {
-                area.style.display = "none";
+                // For easy/medium allow submit area if buzzer enabled and team not out
+                if ((currentLevel === 'easy' || currentLevel === 'medium') && enable && !outs.includes(team)) {
+                    area.style.display = "block";
+                } else {
+                    area.style.display = "none";
+                }
             }
         }
     });
 }
-
 
 
 
@@ -740,6 +816,14 @@ if (document.getElementById("buzzerBtn")) {
     document.getElementById("buzzerBtn").onclick = async () => {
         let team = sessionStorage.getItem("team");
         if (!team) return;
+
+        // For easy/medium we don't use buzzer single-lock; team can press to indicate they are submitting
+        if (currentLevel === 'easy' || currentLevel === 'medium') {
+            // just visual/audio feedback; actual submission happens via submitAnswer
+            playSound("buzzSound");
+            if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "🔊 Ready to submit...";
+            return;
+        }
 
         await setBuzzerState({ buzzed: team });
 
@@ -755,10 +839,6 @@ if (document.getElementById("buzzerBtn")) {
 // ================= QUESTION BOARD =================
 async function showBoard(level, btn) {
     currentLevel = level;
-
-    correctTeamsOrder = [];
-    answeredTeams = [];
-
 
     let container = document.getElementById("questionBox");
     if (container) container.style.display = "grid"; // show board kapag pinili na
@@ -875,7 +955,3 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
-
-
-
-
