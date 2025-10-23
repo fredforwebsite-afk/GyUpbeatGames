@@ -168,16 +168,6 @@ function stopAllTimersAndSounds() {
     });
 }
 
-// ---------- helper: check if all teams submitted ----------
-async function allTeamsSubmitted() {
-    const snap = await getDoc(doc(db, "game", "answers"));
-    const data = snap.exists() ? snap.data() : {};
-    const allTeams = ["Zack", "Ryan", "Kyle"];
-    // consider a team submitted if it has a non-empty string value OR we have a timestamp field for them
-    const submittedCount = allTeams.filter(t => (data[t] && String(data[t]).trim() !== "") || data[`${t}_ts`]).length;
-    return submittedCount === allTeams.length;
-}
-
 
 
 // ================= ADMIN FUNCTIONS =================
@@ -222,7 +212,7 @@ async function startRound() {
         });
 
         countdownInterval = setInterval(runTimer, 1000);
-    }  else {
+    } else {
         // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
         // Use the ANSWER window (20s) for the circle timer so all teams have 20s to submit.
         mode = "open"; // informational only
@@ -247,55 +237,54 @@ async function startRound() {
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
         // start a countdown for the whole open-answer window (20s)
-        // NEW BEHAVIOR: when timer reaches 0, check submissions:
-        //  - if all teams submitted => finalize
-        //  - otherwise reset timer and continue until all 3 submit
-        countdownInterval = setInterval(async () => {
-            timeLeft--;
-            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-            updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
+// ================= NEW LOGIC =================
+// start a countdown for the open-answer window (20s)
+// but stop early if ALL 3 teams have submitted
 
-            if (timeLeft > 5) playSound("beepSound");
-            else if (timeLeft > 0) playSound("beepHighSound");
+let submittedTeams = new Set();
 
-            if (timeLeft <= 0) {
-                // when timer hits zero, check if all teams already submitted
-                try {
-                    const allSubmitted = await allTeamsSubmitted();
-                    if (allSubmitted) {
-                        // stop and finalize
-                        clearInterval(countdownInterval);
-                        countdownInterval = null;
-                        stopAllTimersAndSounds();
-                        playSound("timesUpSound");
-                        await finalizeEasyMediumRound();
-                    } else {
-                        // NOT all submitted -> reset timer window and inform admin which teams remain
-                        const snap = await getDoc(doc(db, "game", "answers"));
-                        const data = snap.exists() ? snap.data() : {};
-                        const allTeams = ["Zack", "Ryan", "Kyle"];
-                        const remaining = allTeams.filter(t => !((data[t] && String(data[t]).trim() !== "") || data[`${t}_ts`]));
-                        // reset the timer to give remaining teams another window
-                        timeLeft = answerTime;
-                        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
-                        updateCircle(answerTime, "lime", answerTime);
-                        if (document.getElementById("stealNotice")) {
-                            document.getElementById("stealNotice").innerText = `Waiting on: ${remaining.join(", ")}`;
-                        }
-                        // keep countdownInterval running (it continues)
-                    }
-                } catch (err) {
-                    console.error("Error checking submissions after timeout", err);
-                    // fallback: finalize to avoid infinite silent failure
-                    clearInterval(countdownInterval);
-                    countdownInterval = null;
-                    stopAllTimersAndSounds();
-                    await finalizeEasyMediumRound().catch(console.error);
-                }
-            }
-        }, 1000);
+// watch for submissions in real time
+if (answersUnsub) answersUnsub(); // clean any previous listener
+answersUnsub = onSnapshot(doc(db, "game", "answers"), (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    submittedTeams.clear();
+
+    // check each team
+    ["Zack", "Ryan", "Kyle"].forEach(team => {
+        if (data[team] && data[team].trim() !== "") {
+            submittedTeams.add(team);
+        }
+    });
+
+    // if all 3 teams submitted, end early
+    if (submittedTeams.size === 3) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        if (answersUnsub) answersUnsub();
+        stopAllTimersAndSounds();
+        finalizeEasyMediumRound().catch(console.error);
     }
+});
 
+// countdown still runs normally (in case some teams don't submit)
+countdownInterval = setInterval(() => {
+    timeLeft--;
+    if (document.getElementById("circleTime"))
+        document.getElementById("circleTime").textContent = timeLeft;
+    updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
+
+    if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        if (answersUnsub) answersUnsub();
+        stopAllTimersAndSounds();
+        playSound("timesUpSound");
+        finalizeEasyMediumRound().catch(console.error);
+    }
+}, 1000);
+
+    }
 }
 
 
