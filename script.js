@@ -51,12 +51,16 @@ const questions = {
     easy: [
         { q: "Guess the country flag:", a: "japan", img: "https://upload.wikimedia.org/wikipedia/en/9/9e/Flag_of_Japan.svg" },
         { q: "Guess the country flag:", a: "france", img: "https://upload.wikimedia.org/wikipedia/en/c/c3/Flag_of_France.svg" },
-        { q: "Guess the country flag:", a: "germany", img: "https://upload.wikimedia.org/wikipedia/commons/4/45/Flag_of_Ireland.svg" },
+        { q: "Guess the country flag:", a: "Ireland", img: "https://upload.wikimedia.org/wikipedia/commons/4/45/Flag_of_Ireland.svg" },
         { q: "Guess the country flag:", a: "italy", img: "https://upload.wikimedia.org/wikipedia/en/0/03/Flag_of_Italy.svg" },
         { q: "Guess the country flag:", a: "brazil", img: "https://upload.wikimedia.org/wikipedia/en/0/05/Flag_of_Brazil.svg" },
         { q: "Guess the country flag:", a: "canada", img: "https://upload.wikimedia.org/wikipedia/commons/c/cf/Flag_of_Canada.svg" },
         { q: "Guess the country flag:", a: "india", img: "https://upload.wikimedia.org/wikipedia/en/4/41/Flag_of_India.svg" },
-        { q: "Guess the country flag:", a: "south korea", img: "https://upload.wikimedia.org/wikipedia/commons/0/09/Flag_of_South_Korea.svg" }
+        { q: "Guess the country flag:", a: "south korea", img: "https://upload.wikimedia.org/wikipedia/commons/0/09/Flag_of_South_Korea.svg" },
+        { q: "Guess the country flag:", a: "Malaysia", img: "https://upload.wikimedia.org/wikipedia/commons/6/66/Flag_of_Malaysia.svg" },
+        { q: "Guess the country flag:", a: ["United Kingdom", "UK"], img: "https://upload.wikimedia.org/wikipedia/commons/8/83/Flag_of_the_United_Kingdom_%283-5%29.svg" },
+        { q: "Guess the country flag:", a: "Israel", img: "https://upload.wikimedia.org/wikipedia/commons/d/d4/Flag_of_Israel.svg" },
+       { q: "Guess the country flag:", a: ["United States", "USA"], img: "https://upload.wikimedia.org/wikipedia/commons/f/f5/Flag_of_the_United_States_%281912-1959%29.svg" }
 
     ],
     medium: [
@@ -928,6 +932,7 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
 
