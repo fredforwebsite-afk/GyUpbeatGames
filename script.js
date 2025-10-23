@@ -237,53 +237,20 @@ async function startRound() {
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
         // start a countdown for the whole open-answer window (20s)
-// ================= NEW LOGIC =================
-// start a countdown for the open-answer window (20s)
-// but stop early if ALL 3 teams have submitted
+        countdownInterval = setInterval(() => {
+            timeLeft--;
+            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+            updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
-let submittedTeams = new Set();
-
-// watch for submissions in real time
-if (answersUnsub) answersUnsub(); // clean any previous listener
-answersUnsub = onSnapshot(doc(db, "game", "answers"), (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    submittedTeams.clear();
-
-    // check each team
-    ["Zack", "Ryan", "Kyle"].forEach(team => {
-        if (data[team] && data[team].trim() !== "") {
-            submittedTeams.add(team);
-        }
-    });
-
-    // if all 3 teams submitted, end early
-    if (submittedTeams.size === 3) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-        if (answersUnsub) answersUnsub();
-        stopAllTimersAndSounds();
-        finalizeEasyMediumRound().catch(console.error);
-    }
-});
-
-// countdown still runs normally (in case some teams don't submit)
-countdownInterval = setInterval(() => {
-    timeLeft--;
-    if (document.getElementById("circleTime"))
-        document.getElementById("circleTime").textContent = timeLeft;
-    updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
-
-    if (timeLeft <= 0) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-        if (answersUnsub) answersUnsub();
-        stopAllTimersAndSounds();
-        playSound("timesUpSound");
-        finalizeEasyMediumRound().catch(console.error);
-    }
-}, 1000);
-
+            if (timeLeft <= 0) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+                stopAllTimersAndSounds();
+                playSound("timesUpSound");
+                // when time ends, evaluate remaining: reveal correct or award based on submitted correctOrder
+                finalizeEasyMediumRound().catch(console.error);
+            }
+        }, 1000);
     }
 }
 
