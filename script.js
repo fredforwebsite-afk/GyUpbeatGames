@@ -495,9 +495,20 @@ function startAnswerTimer(team) {
     }, 1000);
 }
 
+
+if (window.lastEvaluated && window.lastEvaluated[team] === ans) return;
+window.lastEvaluated = window.lastEvaluated || {};
+window.lastEvaluated[team] = ans;
+
 // central answer evaluation (called when answers doc changes)
+// ================= ANSWER EVALUATION (FIXED) =================
 async function evaluateAnswer(team, ans) {
     if (!team || !ans) return;
+
+    // Prevent duplicate evaluations of the same team+answer
+    window._evaluatedTeams = window._evaluatedTeams || {};
+    if (window._evaluatedTeams[team] === ans.trim().toLowerCase()) return;
+    window._evaluatedTeams[team] = ans.trim().toLowerCase();
 
     if (document.getElementById("submittedAnswer")) {
         document.getElementById("submittedAnswer").innerText = "📝 " + ans;
@@ -511,80 +522,77 @@ async function evaluateAnswer(team, ans) {
     const idx = answersData.index ?? currentQIndex;
 
     const correctAns = (questions[lvl][idx].a || "").trim().toLowerCase();
+    const teamAnswer = (ans || "").trim().toLowerCase();
+    const correct = teamAnswer === correctAns;
 
-    // EASY / MEDIUM: multiple teams may answer; award based on order of correct submissions
-    if (lvl === 'easy' || lvl === 'medium') {
-        const teamAnswer = (ans || "").trim().toLowerCase();
-        const correct = teamAnswer === correctAns;
-
-        // record correct order (if correct and not recorded yet)
+    // ========== EASY / MEDIUM ROUND ==========
+    if (lvl === "easy" || lvl === "medium") {
         const orderDoc = doc(db, "game", "correctOrder");
         const orderSnap = await getDoc(orderDoc);
         const orderData = orderSnap.exists() ? (orderSnap.data().order || []) : [];
 
         if (correct) {
-            // if already in order, ignore duplicate
+            // Add to correct order if not already
             if (!orderData.includes(team)) {
                 orderData.push(team);
                 await setDoc(orderDoc, { order: orderData }, { merge: true });
             }
 
-            // award points based on position
-            let position = orderData.indexOf(team); // 0-based
-            let basePoints = (lvl === "easy") ? 100 : 300;
+            // Determine awarded points
+            const basePoints = lvl === "easy" ? 100 : 300;
+            const position = orderData.indexOf(team); // 0 = first, 1 = second, 2 = third
             let awarded = 0;
-            if (position === 0) awarded = basePoints; // first -> full points
-            else if (position === 1) awarded = Math.round(basePoints * 0.25); // second -> reduce 75% => 25% awarded
-            else if (position === 2) awarded = Math.round(basePoints * 0.5); // third -> reduce 50% => 50% awarded
 
+            if (position === 0) awarded = basePoints;                 // 1st
+            else if (position === 1) awarded = Math.round(basePoints * 0.75); // 2nd (25%)
+            else if (position === 2) awarded = Math.round(basePoints * 0.50);  // 3rd (50%)
+
+            // Apply score only once
             scores[team] = (scores[team] || 0) + awarded;
             await saveScores();
             updateScores();
             highlightScore(team);
 
-            // show feedback
             stopAllTimersAndSounds();
             playSound("correctSound");
+
             if (document.getElementById("submittedAnswer")) {
                 document.getElementById("submittedAnswer").innerText = `✅ ${team} is CORRECT! (+${awarded})`;
             }
 
-            // if all teams have either answered or order length == 3 or all teams submitted, lock question and cleanup
+            // Lock question if all 3 teams answered
             const allTeams = ["Zack", "Ryan", "Kyle"];
             const answersSnap = await getDoc(doc(db, "game", "answers"));
             const ad = answersSnap.exists() ? answersSnap.data() : {};
             const submittedCount = allTeams.filter(t => (ad[t] && ad[t].trim() !== "")).length;
 
-            // If everyone submitted OR all three correct positions filled OR time ended elsewhere, finalize
             if (submittedCount === allTeams.length || orderData.length === allTeams.length) {
                 lockQuestion(lvl, idx);
                 await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
                 await setOutTeams([]);
-                return;
             }
 
-            return;
         } else {
-            // wrong answer -> no points & mark team as OUT; no steal mode in easy/medium
+            // Wrong answer
             playSound("wrongSound");
             await handleTeamWrongOrTimeout(team, "WRONG");
-            return;
         }
+
+        // Clear evaluated answer to prevent repeat triggers
+        await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
+        return;
     }
 
-    // HARD: original single-team behaviour
-    if (ans.trim().toLowerCase() === correctAns) {
+    // ========== HARD ROUND ==========
+    if (correct) {
         stopAllTimersAndSounds();
         playSound("correctSound");
-
-        let points = (lvl === "hard") ? 500 : 0;
+        const points = 500;
         scores[team] = (scores[team] || 0) + points;
-
         await saveScores();
         updateScores();
         highlightScore(team);
 
-        // stop countdown
         clearInterval(countdownInterval);
         timeLeft = 0;
         if (document.getElementById("circleTime")) {
@@ -593,26 +601,20 @@ async function evaluateAnswer(team, ans) {
         updateCircle(0, "lime", answerTime);
 
         if (document.getElementById("submittedAnswer")) {
-            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT!";
+            document.getElementById("submittedAnswer").innerText = "✅ " + team + " is CORRECT! (+500)";
         }
 
-        // lock question and cleanup
         lockQuestion(lvl, idx);
-        await setBuzzerState({ buzzed: "" });
-        await setDoc(doc(db, "game", "answers"), {
-            [team]: ""
-        }, { merge: true });
-        await setBuzzerState({ stealMode: false });
+        await setBuzzerState({ buzzed: "", stealMode: false });
         await setOutTeams([]);
-    }
-
-    // HARD Wrong
-    else {
+    } else {
         playSound("wrongSound");
         await handleTeamWrongOrTimeout(team, "WRONG");
     }
-}
 
+    // Clear after evaluation
+    await setDoc(doc(db, "game", "answers"), { [team]: "" }, { merge: true });
+}
 
 
 // ================= WRONG / TIMEOUT / STEAL =================
@@ -758,18 +760,39 @@ async function startStealMode(team) {
 
 // ================= AUTO LISTENER FOR ANSWERS (real-time) =================
 // Listen to answers doc changes to instantly evaluate answers when submitted
+// ================= FIXED ANSWER LISTENER =================
 function registerAnswersListener() {
     if (answersUnsub) answersUnsub();
-    answersUnsub = onSnapshot(doc(db, "game", "answers"), (snap) => {
+
+    // Track which teams' answers have already been evaluated for this question
+    let evaluatedAnswers = {};
+
+    answersUnsub = onSnapshot(doc(db, "game", "answers"), async (snap) => {
         if (!snap.exists()) return;
         const data = snap.data();
-        // find which team has a non-empty answer recently
-        ["Zack", "Ryan", "Kyle"].forEach(team => {
+        const currentLevelInDB = data.level || currentLevel;
+        const currentIndexInDB = data.index ?? currentQIndex;
+
+        for (const team of ["Zack", "Ryan", "Kyle"]) {
             const ans = (data[team] || "").trim();
-            if (ans) {
-                evaluateAnswer(team, ans).catch(console.error);
+
+            // Only evaluate if this team's answer exists and hasn't been processed yet
+            if (ans && !evaluatedAnswers[team]) {
+                evaluatedAnswers[team] = true; // mark as processed
+
+                await evaluateAnswer(team, ans);
+
+                // After evaluating, clear their answer so it won’t trigger again
+                await setDoc(doc(db, "game", "answers"), {
+                    [team]: ""
+                }, { merge: true });
             }
-        });
+        }
+
+        // Reset evaluatedAnswers map when question changes
+        if (currentLevelInDB !== currentLevel || currentIndexInDB !== currentQIndex) {
+            evaluatedAnswers = {};
+        }
     });
 }
 
