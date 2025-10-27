@@ -267,10 +267,15 @@ async function finalizeEasyMediumRound() {
     const order = correctSnap.exists() ? (correctSnap.data().order || []) : [];
 
     // if at least one correct occurred we keep scores as-is. If none correct and all teams either submitted or time ended, reveal answer.
-    if (order.length === 0) {
-        await revealCorrectAnswerAndLock();
-        return;
-    }
+const allTeams = ["Zack", "Ryan", "Kyle"];
+const snap = await getDoc(doc(db, "game", "answers"));
+const data = snap.exists() ? snap.data() : {};
+const allSubmitted = allTeams.every(t => (data[t] && data[t].trim() !== ""));
+
+if (order.length === 0 || allSubmitted) {
+    await revealCorrectAnswerAndLock();
+    return;
+}
 
     // lock question
     lockQuestion(currentLevel, currentQIndex);
@@ -442,9 +447,10 @@ async function submitAnswer() {
             [`${team}_ts`]: Date.now()
         }, { merge: true });
 
-        if (document.getElementById("answerArea")) {
-            document.getElementById("answerArea").style.display = "none";
-        }
+if (document.getElementById("submittedAnswer")) {
+    document.getElementById("submittedAnswer").innerText = "✅ teamName + Answer submitted";
+}
+
         // no countdown interruption here; evaluateAnswer will handle awarding in real-time
         return;
     }
@@ -769,9 +775,11 @@ function registerAnswersListener() {
         // find which team has a non-empty answer recently
         ["Zack", "Ryan", "Kyle"].forEach(team => {
             const ans = (data[team] || "").trim();
-            if (ans) {
-                evaluateAnswer(team, ans).catch(console.error);
-            }
+if (ans && ans.trim() !== "") {
+    // silently evaluate without revealing to others
+    evaluateAnswer(team, ans).catch(console.error);
+}
+
         });
     });
 }
@@ -947,6 +955,7 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
 
 
