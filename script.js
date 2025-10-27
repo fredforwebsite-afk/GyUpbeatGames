@@ -518,7 +518,7 @@ async function evaluateAnswer(team, ans) {
     window._evaluatedTeams[key] = true;
 
 if (document.getElementById("submittedAnswer")) {
-    document.getElementById("submittedAnswer").innerText = team + "✅ + Answer submitted";
+    document.getElementById("submittedAnswer").innerText = "✅ " + team + " Answer submitted";
 }
 
     clearInterval(answerTimerInterval);
