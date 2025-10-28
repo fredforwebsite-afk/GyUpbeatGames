@@ -730,11 +730,9 @@ async function revealCorrectAnswerAndLock() {
     }
 
     // ✅ Admin-side reveal box
-    
     if (document.getElementById("revealAnswer")) {
         document.getElementById("revealAnswer").innerText = "✔ Correct Answer: " + correct;
     }
-    
 
     // Lock question at reset states
     lockQuestion(currentLevel, currentQIndex);
@@ -943,18 +941,6 @@ window.addEventListener("beforeunload", () => {
     if (answersUnsub) answersUnsub();
 });
 
-
-// ========== ENTER KEY TO SUBMIT ANSWER ==========
-document.addEventListener("keydown", function (e) {
-    // Only trigger if focused inside the answer input box
-    const ansBox = document.getElementById("teamAnswer");
-    if (e.key === "Enter" && ansBox && document.activeElement === ansBox) {
-        e.preventDefault();
-        submitAnswer();
-    }
-});
-
-
 // expose admin functions
 window.startRound = startRound;
 window.showBoard = showBoard;
@@ -962,6 +948,3 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
-
-
-
