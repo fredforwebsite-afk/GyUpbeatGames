@@ -27,6 +27,18 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 
+// Listen to admin timer updates from Firestore
+function registerAnswerCountdownListener() {
+  const countdownRef = doc(db, "game", "answerTimer");
+  onSnapshot(countdownRef, (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const secs = data.timeLeft ?? 0;
+    const el = document.getElementById("answerCountdown");
+    if (el) el.textContent = secs;
+  });
+}
+
 
 // ================= VARIABLES =================
 let scores = { Zack: 0, Ryan: 0, Kyle: 0 };
@@ -174,23 +186,6 @@ function stopAllTimersAndSounds() {
 }
 
 
-function updateAnswerTimeDisplay(seconds) {
-    const ansTimeEl = document.getElementById("answerTime");
-    if (!ansTimeEl) return;
-    if (seconds <= 0) {
-        ansTimeEl.innerText = "Answer Time: ⏳ Time's up!";
-        ansTimeEl.style.color = "red";
-    } else {
-        ansTimeEl.innerText = "Answer Time: " + seconds + "s";
-        // Color transitions: green → yellow → red
-        if (seconds > 7) ansTimeEl.style.color = "lightgreen";
-        else if (seconds > 3) ansTimeEl.style.color = "yellow";
-        else ansTimeEl.style.color = "red";
-    }
-}
-
-
-
 
 // ================= ADMIN FUNCTIONS =================
 let buzzerSnapshotCleanup = null;
@@ -198,7 +193,6 @@ let buzzerSnapshotCleanup = null;
 async function startRound() {
     // stop existing countdown
     clearInterval(countdownInterval);
-    
 
     // reset per-turn state
     await resetTurnState();
@@ -327,6 +321,9 @@ function runTimer() {
 
         if (timeLeft > 5) playSound("beepSound");
         else if (timeLeft > 0) playSound("beepHighSound");
+
+         // 👇 add this line to sync time with Firestore
+    await setDoc(doc(db, "game", "answerTimer"), { timeLeft }, { merge: true });
 
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
@@ -494,7 +491,6 @@ async function submitAnswer() {
 function startAnswerTimer(team) {
     // will show on admin UI
     let sec = answerTime;
-     updateAnswerTimeDisplay(sec); // <--- show immediately
     if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
 
     clearInterval(answerTimerInterval);
@@ -954,6 +950,7 @@ window.addEventListener("load", async () => {
     registerAnswersListener();
     registerTeamBuzzerUI();
     registerCurrentQuestionListener();
+    registerAnswerCountdownListener(); // 👈 added
     await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
 });
 
