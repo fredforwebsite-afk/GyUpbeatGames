@@ -27,15 +27,15 @@
 
         @keyframes gradientBG {
             0% {
-                background-position: 0% 50%
+                background-position: 0% 50%;
             }
 
             50% {
-                background-position: 100% 50%
+                background-position: 100% 50%;
             }
 
             100% {
-                background-position: 0% 50%
+                background-position: 0% 50%;
             }
         }
 
@@ -74,23 +74,31 @@
             text-align: center;
         }
 
+        /* === Glowing Moving Effect Text === */
         .glow-text {
-            font-size: 48px;
-            font-weight: bold;
-            color: #00e6ff;
-            text-shadow: 0 0 10px #00e6ff, 0 0 20px #00e6ff, 0 0 40px #00e6ff, 0 0 80px #00e6ff;
-            animation: glowText 2s ease-in-out infinite alternate;
+            font-size: 52px;
+            font-weight: 800;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #00e6ff, #ff00ff, #00e6ff);
+            background-size: 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer 4s linear infinite;
             margin-bottom: 60px;
+            letter-spacing: 3px;
+            text-shadow:
+                0 0 10px rgba(0, 230, 255, 0.7),
+                0 0 20px rgba(0, 230, 255, 0.5),
+                0 0 40px rgba(255, 0, 255, 0.3);
         }
 
-        @keyframes glowText {
-            from {
-                text-shadow: 0 0 10px #00e6ff, 0 0 20px #00e6ff, 0 0 40px #00e6ff, 0 0 80px #00e6ff;
+        @keyframes shimmer {
+            0% {
+                background-position: 0% 50%;
             }
 
-            to {
-                text-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff, 0 0 80px #ff00ff, 0 0 120px #ff00ff;
-                color: #ffb3ff;
+            100% {
+                background-position: 300% 50%;
             }
         }
 
