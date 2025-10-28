@@ -182,6 +182,11 @@ async function startRound() {
     // stop existing countdown
     clearInterval(countdownInterval);
 
+    // 🧹 Clear the answer box at the start of every round
+const ansBox = document.getElementById("teamAnswer");
+if (ansBox) ansBox.value = "";
+
+
     // reset per-turn state
     await resetTurnState();
 
@@ -943,6 +948,18 @@ window.addEventListener("beforeunload", () => {
     if (answersUnsub) answersUnsub();
 });
 
+
+// ========== ENTER KEY TO SUBMIT ANSWER ==========
+document.addEventListener("keydown", function (e) {
+    // Only trigger if focused inside the answer input box
+    const ansBox = document.getElementById("teamAnswer");
+    if (e.key === "Enter" && ansBox && document.activeElement === ansBox) {
+        e.preventDefault();
+        submitAnswer();
+    }
+});
+
+
 // expose admin functions
 window.startRound = startRound;
 window.showBoard = showBoard;
@@ -950,4 +967,5 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
 
