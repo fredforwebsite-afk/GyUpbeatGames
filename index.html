@@ -10,12 +10,13 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            flex-direction: column;
             font-family: 'Segoe UI', sans-serif;
             background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1b2735);
             background-size: 400% 400%;
@@ -23,19 +24,21 @@
             overflow: hidden;
             color: white;
         }
-        
+
         @keyframes gradientBG {
             0% {
                 background-position: 0% 50%
             }
+
             50% {
                 background-position: 100% 50%
             }
+
             100% {
                 background-position: 0% 50%
             }
         }
-        
+
         .admin-icon {
             position: absolute;
             top: 20px;
@@ -46,29 +49,51 @@
             animation: pulse 2s infinite;
             text-shadow: 0 0 8px #00e6ff, 0 0 20px #00e6ff;
         }
-        
+
         .admin-icon:hover {
             color: #ff00ff;
             text-shadow: 0 0 12px #ff00ff, 0 0 30px #ff00ff;
             transform: scale(1.2);
         }
-        
+
         @keyframes pulse {
             0% {
                 text-shadow: 0 0 5px #00e6ff, 0 0 15px #00e6ff;
             }
+
             50% {
                 text-shadow: 0 0 20px #00e6ff, 0 0 40px #00e6ff;
             }
+
             100% {
                 text-shadow: 0 0 5px #00e6ff, 0 0 15px #00e6ff;
             }
         }
-        
+
         .container {
             text-align: center;
         }
-        
+
+        .glow-text {
+            font-size: 48px;
+            font-weight: bold;
+            color: #00e6ff;
+            text-shadow: 0 0 10px #00e6ff, 0 0 20px #00e6ff, 0 0 40px #00e6ff, 0 0 80px #00e6ff;
+            animation: glowText 2s ease-in-out infinite alternate;
+            margin-bottom: 60px;
+        }
+
+        @keyframes glowText {
+            from {
+                text-shadow: 0 0 10px #00e6ff, 0 0 20px #00e6ff, 0 0 40px #00e6ff, 0 0 80px #00e6ff;
+            }
+
+            to {
+                text-shadow: 0 0 20px #ff00ff, 0 0 40px #ff00ff, 0 0 80px #ff00ff, 0 0 120px #ff00ff;
+                color: #ffb3ff;
+            }
+        }
+
         .glow-button {
             padding: 16px 50px;
             font-size: 22px;
@@ -82,7 +107,7 @@
             transition: all 0.4s ease;
             box-shadow: 0 0 12px #00e6ff, 0 0 30px #00e6ff;
         }
-        
+
         .glow-button:hover {
             background: #ff00ff;
             color: #fff;
@@ -95,8 +120,10 @@
 <body>
     <div class="admin-icon" onclick="adminLogin()">🔑</div>
     <div class="container">
+        <div class="glow-text">WELCOME TO MONTHLY HANGOUT</div>
         <button class="glow-button" onclick="location.href='team.html'">Select Team</button>
     </div>
+
     <script>
         function adminLogin() {
             let pwd = prompt("🔐 Enter Admin Password:");
