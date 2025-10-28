@@ -174,6 +174,23 @@ function stopAllTimersAndSounds() {
 }
 
 
+function updateAnswerTimeDisplay(seconds) {
+    const ansTimeEl = document.getElementById("answerTime");
+    if (!ansTimeEl) return;
+    if (seconds <= 0) {
+        ansTimeEl.innerText = "Answer Time: ⏳ Time's up!";
+        ansTimeEl.style.color = "red";
+    } else {
+        ansTimeEl.innerText = "Answer Time: " + seconds + "s";
+        // Color transitions: green → yellow → red
+        if (seconds > 7) ansTimeEl.style.color = "lightgreen";
+        else if (seconds > 3) ansTimeEl.style.color = "yellow";
+        else ansTimeEl.style.color = "red";
+    }
+}
+
+
+
 
 // ================= ADMIN FUNCTIONS =================
 let buzzerSnapshotCleanup = null;
@@ -181,11 +198,7 @@ let buzzerSnapshotCleanup = null;
 async function startRound() {
     // stop existing countdown
     clearInterval(countdownInterval);
-
-    // 🧹 Clear the answer box at the start of every round
-const ansBox = document.getElementById("teamAnswer");
-if (ansBox) ansBox.value = "";
-
+    
 
     // reset per-turn state
     await resetTurnState();
@@ -288,9 +301,6 @@ function runTimer() {
     if (document.getElementById("circleTime")) {
         document.getElementById("circleTime").textContent = timeLeft;
     }
-    const ansTimeEl = document.getElementById("answerTime");
-if (ansTimeEl) ansTimeEl.innerText = "Answer Time: ⏳ Time's up!";
-
 
     if (mode === "buzz") {
         updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", buzzTime);
@@ -312,13 +322,8 @@ if (ansTimeEl) ansTimeEl.innerText = "Answer Time: ⏳ Time's up!";
             }
         }
 
-    } else 
-        if (mode === "answer") {
+    } else if (mode === "answer") {
         updateCircle(timeLeft, timeLeft <= 5 ? "red" : "yellow", answerTime);
-            // ⏳ Update visible answer timer below answer box
-    const ansTimeEl = document.getElementById("answerTime");
-    if (ansTimeEl) ansTimeEl.innerText = "Answer Time: " + timeLeft + "s";
-
 
         if (timeLeft > 5) playSound("beepSound");
         else if (timeLeft > 0) playSound("beepHighSound");
@@ -489,11 +494,8 @@ async function submitAnswer() {
 function startAnswerTimer(team) {
     // will show on admin UI
     let sec = answerTime;
+     updateAnswerTimeDisplay(sec); // <--- show immediately
     if (document.getElementById("submittedAnswer")) document.getElementById("submittedAnswer").innerText = "⏳ " + sec + "s left...";
-
-    const ansTimeEl = document.getElementById("answerTime");
-if (ansTimeEl) ansTimeEl.innerText = "Answer Time: " + sec + "s";
-
 
     clearInterval(answerTimerInterval);
     answerTimerInterval = setInterval(async() => {
