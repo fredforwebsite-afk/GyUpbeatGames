@@ -730,9 +730,11 @@ async function revealCorrectAnswerAndLock() {
     }
 
     // ✅ Admin-side reveal box
+    /*
     if (document.getElementById("revealAnswer")) {
         document.getElementById("revealAnswer").innerText = "✔ Correct Answer: " + correct;
     }
+    */
 
     // Lock question at reset states
     lockQuestion(currentLevel, currentQIndex);
@@ -948,3 +950,4 @@ window.resetGame = resetGame;
 window.submitAnswer = submitAnswer;
 window.selectTeam = selectTeam;
 window.startStealMode = startStealMode;
+
