@@ -10,57 +10,6 @@ import {
     onSnapshot,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
-
-// === TEAM TIMER MIRROR ===
-function registerTeamTimerMirror() {
-    onSnapshot(doc(db, "game", "timerState"), (snap) => {
-        const data = snap.exists() ? snap.data() : {};
-
-        if (!data.running) {
-            clearInterval(window.teamTimerInterval);
-            window.teamTimerInterval = null;
-            // reset UI when not running
-            const countdownEl = document.getElementById("answerCountdown");
-            if (countdownEl) countdownEl.textContent = "0";
-            return;
-        }
-
-        // prevent multiple intervals
-        if (window.teamTimerInterval) return;
-
-        const total = data.duration || 20;
-        const startTime = data.startTime || Date.now();
-        const endTime = startTime + total * 1000;
-
-        const countdownEl = document.getElementById("answerCountdown");
-        const buzzerSound = new Audio("sound/buzzSound.mp3");
-        const tickSound = new Audio("sound/beepSound.mp3");
-        const tickHighSound = new Audio("sound/beepHighSound.mp3");
-        const timeUpSound = new Audio("sound/timesUpSound.mp3");
-
-        function updateTeamTimer() {
-            const now = Date.now();
-            const remaining = Math.max(0, Math.ceil((endTime - now) / 1000));
-
-            if (countdownEl) countdownEl.textContent = remaining;
-
-            // play sounds
-            if (remaining > 5) tickSound.play().catch(() => {});
-            else if (remaining > 0) tickHighSound.play().catch(() => {});
-            else if (remaining === 0) timeUpSound.play().catch(() => {});
-
-            if (remaining <= 0) {
-                clearInterval(window.teamTimerInterval);
-                window.teamTimerInterval = null;
-            }
-        }
-
-        updateTeamTimer();
-        window.teamTimerInterval = setInterval(updateTeamTimer, 1000);
-    });
-}
-
-
 // Firebase config (replace with your project’s config)
 const firebaseConfig = {
     apiKey: "AIzaSyADxgFTvu0iycYC_ano36TFclPSh4YfqzE",
@@ -230,10 +179,15 @@ function stopAllTimersAndSounds() {
 let buzzerSnapshotCleanup = null;
 
 async function startRound() {
+    // stop existing countdown
     clearInterval(countdownInterval);
+
+    // reset per-turn state
     await resetTurnState();
 
+    // SPECIAL BEHAVIOR: easy/medium -> open simultaneous team-answer mode; hard -> original single-buzz + steal
     if (currentLevel === 'hard') {
+        // HARD: single team buzz -> switch to answer (unchanged)
         mode = "buzz";
         timeLeft = buzzTime;
 
@@ -244,28 +198,30 @@ async function startRound() {
             stealMode: false
         });
 
-        // 🟢 Start shared timer
-        await setDoc(doc(db, "game", "timerState"), {
-            running: true,
-            startTime: Date.now(),
-            duration: timeLeft
-        });
-
         updateCircle(buzzTime, "lime", buzzTime);
-        document.getElementById("circleTime").textContent = timeLeft;
-        document.getElementById("firstBuzz").textContent = "None yet";
-        document.getElementById("stealNotice").textContent = "";
+        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "None yet";
+        if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
 
-        if (buzzerUnsub) buzzerUnsub();
+        // register a single buzzer snapshot listener (unsub first if already registered)
+        if (buzzerUnsub) {
+            buzzerUnsub();
+            buzzerUnsub = null;
+        }
         buzzerUnsub = onSnapshot(doc(db, "game", "buzzer"), (snap) => {
             const data = snap.exists() ? snap.data() : {};
-            if (data.buzzed && data.buzzed !== "") stopOnBuzz(data.buzzed).catch(console.error);
+            if (data.buzzed && data.buzzed !== "") {
+                // buzz happened
+                stopOnBuzz(data.buzzed).catch(console.error);
+            }
         });
 
         countdownInterval = setInterval(runTimer, 1000);
     } else {
-        mode = "open";
-        timeLeft = answerTime;
+        // EASY / MEDIUM: allow all teams to submit one answer each (no steal mode, no single-answer lock)
+        // Use the ANSWER window (20s) for the circle timer so all teams have 20s to submit.
+        mode = "open"; // informational only
+        timeLeft = answerTime; // 20 seconds (uses existing answerTime variable)
 
         await setBuzzerState({
             enableBuzzer: true,
@@ -274,25 +230,21 @@ async function startRound() {
             stealMode: false
         });
 
-        // 🟢 Start shared timer for easy/medium open-answer mode
-        await setDoc(doc(db, "game", "timerState"), {
-            running: true,
-            startTime: Date.now(),
-            duration: timeLeft
-        });
-
+        // clear correctOrder
         await setDoc(doc(db, "game", "correctOrder"), { order: [] });
 
         updateCircle(answerTime, "lime", answerTime);
-        document.getElementById("circleTime").textContent = timeLeft;
-        document.getElementById("firstBuzz").textContent = "Open to all teams";
-        document.getElementById("stealNotice").textContent = "";
+        if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
+        if (document.getElementById("firstBuzz")) document.getElementById("firstBuzz").textContent = "Open to all teams";
+        if (document.getElementById("stealNotice")) document.getElementById("stealNotice").textContent = "";
 
+        // Ensure any previous buzzer listener is removed — team UI listens to buzzer state and will enable submit button
         if (buzzerUnsub) { buzzerUnsub(); buzzerUnsub = null; }
 
-        countdownInterval = setInterval(async () => {
+        // start a countdown for the whole open-answer window (20s)
+        countdownInterval = setInterval(() => {
             timeLeft--;
-            document.getElementById("circleTime").textContent = timeLeft;
+            if (document.getElementById("circleTime")) document.getElementById("circleTime").textContent = timeLeft;
             updateCircle(timeLeft, timeLeft <= 5 ? "red" : "lime", answerTime);
 
             if (timeLeft <= 0) {
@@ -300,16 +252,12 @@ async function startRound() {
                 countdownInterval = null;
                 stopAllTimersAndSounds();
                 playSound("timesUpSound");
-
-                // 🔴 Stop shared timer
-                await setDoc(doc(db, "game", "timerState"), { running: false }, { merge: true });
-
+                // when time ends, evaluate remaining: reveal correct or award based on submitted correctOrder
                 finalizeEasyMediumRound().catch(console.error);
             }
         }, 1000);
     }
 }
-
 
 
 async function finalizeEasyMediumRound() {
@@ -330,7 +278,7 @@ async function finalizeEasyMediumRound() {
     await setOutTeams([]);
 }
 
-async function runTimer() {
+function runTimer() {
     timeLeft--;
     if (document.getElementById("circleTime")) {
         document.getElementById("circleTime").textContent = timeLeft;
@@ -344,9 +292,7 @@ async function runTimer() {
 
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
-            await setDoc(doc(db, "game", "timerState"), { running: false }, { merge: true }); // 🔴 stop shared timer
-
-            await setBuzzerState({ enableBuzzer: false }).catch(console.error);
+            setBuzzerState({ enableBuzzer: false }).catch(console.error);
             if (document.getElementById("circleTime")) {
                 document.getElementById("circleTime").textContent = "⏳ No Buzz";
             }
@@ -366,8 +312,6 @@ async function runTimer() {
 
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
-            await setDoc(doc(db, "game", "timerState"), { running: false }, { merge: true }); // 🔴 stop shared timer
-
             if (document.getElementById("circleTime")) {
                 document.getElementById("circleTime").textContent = "⏳ Time's up!";
             }
@@ -1009,7 +953,6 @@ document.addEventListener("keydown", function (e) {
         submitAnswer();
     }
 });
-
 
 
 // expose admin functions
