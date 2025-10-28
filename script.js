@@ -10,6 +10,7 @@ import {
     onSnapshot,
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
 
+
 // Firebase config (replace with your project’s config)
 const firebaseConfig = {
     apiKey: "AIzaSyADxgFTvu0iycYC_ano36TFclPSh4YfqzE",
@@ -26,18 +27,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-
-// Listen to admin timer updates from Firestore
-function registerAnswerCountdownListener() {
-  const countdownRef = doc(db, "game", "answerTimer");
-  onSnapshot(countdownRef, (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const secs = data.timeLeft ?? 0;
-    const el = document.getElementById("answerCountdown");
-    if (el) el.textContent = secs;
-  });
-}
 
 
 // ================= VARIABLES =================
@@ -321,9 +310,6 @@ function runTimer() {
 
         if (timeLeft > 5) playSound("beepSound");
         else if (timeLeft > 0) playSound("beepHighSound");
-
-         // 👇 add this line to sync time with Firestore
-    await setDoc(doc(db, "game", "answerTimer"), { timeLeft }, { merge: true });
 
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
@@ -950,7 +936,6 @@ window.addEventListener("load", async () => {
     registerAnswersListener();
     registerTeamBuzzerUI();
     registerCurrentQuestionListener();
-    registerAnswerCountdownListener(); // 👈 added
     await setBuzzerState({ enableBuzzer: false, buzzed: "", answeringTeam: "", stealMode: false });
 });
 
